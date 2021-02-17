@@ -1,8 +1,8 @@
 %matplotlib inline
 import os, sys
-PACKAGE_PARENT = 'pylectric-transport/'
-SCRIPT_DIR = os.path.dirname(os.path.realpath(os.path.join(os.getcwd(), os.path.expanduser("2021-02-18_ga-gr-analysis.py"))))
-sys.path.append(os.path.normpath(os.path.join(SCRIPT_DIR, PACKAGE_PARENT)))
+#To import pylectric package locally, specify relative path from cwd to package.
+PACKAGE_PARENT = 'pylectric-transport'
+sys.path.append(os.path.normpath(os.path.join(os.getcwd(), PACKAGE_PARENT)))
 
 import itertools
 from mpl_toolkits.mplot3d import Axes3D
