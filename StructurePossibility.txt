@@ -1,0 +1,17 @@
+Geometries:
+	- Van der Paur
+	- Hall Bar
+	- FET
+
+Measurements:
+	- RVg
+	- RT
+	- RVgT
+
+Materials:
+	- Graphene
+
+Equipement:
+	- PPMS
+	- Oxford
+
