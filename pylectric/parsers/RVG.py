@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class RVG_file():
+    """Object for loading and reading RVG data"""
     def __init__(self, filepath):
 
         #Read header information (1: Titles, 2: Units, 3: Extra information.)
@@ -20,7 +21,8 @@ class RVG_file():
         return
 
     def plot_all(self,ivar_index = 0):
-        #Plots all parameters against the independent variable.
+        """Plots all parameters against the independent variable (ivar_index)."""
+
         num_vars = self.RAW_DATA.shape[1] - 1 #Exclude independent
         #Generate a nice display grid depending on number of variables.
         ii,jj = (1,1)
@@ -55,6 +57,23 @@ class RVG_file():
             ax.tick_params(direction="in")
         plt.tight_layout()
         return fig
+
+    def split_dataset_by_voltage_turning_point(self, ivar_index=0):
+        """Splits a dataset in half, where the return run of the data also exists.
+            Note that this includes flipping the direction of the second data run.
+        """
+        maxima = np.where(self.RAW_DATA[:,ivar_index]==np.max(self.RAW_DATA[:,ivar_index]))
+        if len(maxima) == 1:
+            i = maxima[0][0]
+            return (self.RAW_DATA[:i+1,:], self.RAW_DATA[:i:-1,:])
+        else:
+            minima = np.where(self.RAW_DATA[:,ivar_index]==np.min(self.RAW_DATA[:,ivar_index]))
+            if len(minima) == 1:
+                i = minima[0][0]
+                return (self.RAW_DATA[i+1:0,:], self.RAW_DATA[i:,:])
+            else:
+                raise AttributeError("The dataset does not have a single turning point.")
+                return None
 
 # class RVG_measurement():
     # def __init__(self, data):

@@ -1,212 +1,195 @@
 __version__ = "0.0.1" #initial dump
 
-#Class interpret RvG datafile, intepret sweeps and plot data.
-class RVG_data():
-    def __init__(self, filepath, geo_factor=1):
-        #Set geo factor for devices:  \rho = R * (Geo_factor) = R * (W / L))
-        self.GEO_FACTOR = geo_factor
+from scipy.signal import savgol_filter, argrelextrema
+import numpy as np
+import math
 
-        #Initialize Class Properties
-        self.HAS_TEMP_DATA = None #Flag for temperature
-        self.SINGLE_TURNING_POINT = None #Flag for where the sweep begins from relative to the max and min.
-        self.TEMP_MEAN = None #Average temperature
-        self.TEMP_VAR = None #Variance of temperaturee
-        self.max_U = None #Maximum resistivity in U sweep
-        self.max_D = None #Maximum resistivity in D sweep
-        self.max_U_i = None #Index for maximum resistance in U sweep
-        self.max_D_i = None #Index for maximum resistance in D sweep
-
-        #Read header information (1: Titles, 2: Units, 3: Extra information.)
-        with open(filepath,"r") as file:
-            self.HEADERS = file.readline().split("\t")
-            self.UNITS = file.readline().split("\t")
-            self.COMMENTS = file.readline().split("\t")
-
-        #Read data file
-        self.RAW_DATA = np.genfromtxt(filepath, dtype=float, delimiter="\t", skip_header=3) #Raw data
-        self.DX = np.abs(self.RAW_DATA[0,0] - self.RAW_DATA[1,0]) #Step spacing
-
-        #Check the turning point and separate updown sweep data
-        self.RAW_DATA_U = None #Note resistance -> resistivity
-        self.RAW_DATA_D = None #Note resistance -> resistivity
-        self.isolate_sweep_data()
-        #get max resisitivities:
-        self.max_U = np.amax(self.RAW_DATA_U,0)
-        self.max_D = np.amax(self.RAW_DATA_D,0)
-        #get indexes
-        self.max_U_i = np.where(self.RAW_DATA_U == self.max_U[1])[0]
-        self.max_D_i = np.where(self.RAW_DATA_D == self.max_D[1])[0]
-
-        #Calculate the mean and variance of the temp
-        self.get_temp_dist()
-
-        #Find the resistance for trends at different gate voltages.
-        self.get_vg_simple_points()
-
-        return
-
-    def isolate_sweep_data(self):
-        #Aquire max and min of all columns.
-        self.max = np.amax(self.RAW_DATA,0)
-        self.min = np.amin(self.RAW_DATA,0)
-        #If single turning point, max and min gate values are reached total of 3 times.
-        #If two turning points, then max and min gate values are reached total of 2 times.
-        self.max_vg_i = np.where(self.RAW_DATA[:,0] == self.max[0])[0]
-        self.min_vg_i = np.where(self.RAW_DATA[:,0] == self.min[0])[0]
-
-        # Set SINGLE_TURNING_POINT variable appropriately.
-        x = len(self.max_vg_i) + len(self.min_vg_i)
-        if x == 2:
-            self.SINGLE_TURNING_POINT = False
-        elif x == 3:
-            self.SINGLE_TURNING_POINT = True
-        else:
-            raise IOError("Could not interpret the ends of the filepath correctly.")
-
-        # Use indexes to separate datasets (upward sweep and downward sweep)
-        if self.SINGLE_TURNING_POINT:
-            RAW_DATA_U = self.RAW_DATA[0:self.max_vg_i[0]+1]
-            RAW_DATA_D = self.RAW_DATA[self.max_vg_i[0]:]
-            #swap downward sweep listed data direction
-            RAW_DATA_D = RAW_DATA_D[::-1]
-        else:
-            RAW_DATA_U = np.concatenate((self.RAW_DATA[self.min_vg_i[0]:], self.RAW_DATA[0:self.max_vg_i[0]+1]), axis=0)
-            RAW_DATA_D = self.RAW_DATA[self.min_vg_i[0]+1 : self.max_vg_i[0]] #inherently swaps downward sweep too.
-
-        #Use GEO_FACTOR to convert resistance to resistivity.
-        RAW_DATA_U[:,1] = RAW_DATA_U[:,1] * self.GEO_FACTOR
-        RAW_DATA_D[:,1] = RAW_DATA_D[:,1] * self.GEO_FACTOR
-        #Write to class property.
-        self.RAW_DATA_U = RAW_DATA_U
-        self.RAW_DATA_D = RAW_DATA_D
-        return
-
-    def get_temp_dist(self):
-        self.TEMP_VAR = np.var(self.RAW_DATA[:,4], axis=0)
-        self.TEMP_MEAN = np.mean(self.RAW_DATA[:,4], axis=0)
-        return
-
-    def get_vg_simple_points(self):
-
-        class vg_points():
-            def __init__(self, raw_data_u, raw_data_d, DX):
-                #find all other indexes for different gate voltages to track.
-                self.GATE_VOLTAGES = [-50,-40,-30,-20,-15,-10,-7.5,-5,-3,-2,-1,0,1,2,3,5,7.5,10,15,20,30,40,50]
-                #Resistsances
-                self.rvg_u = []
-                self.rvg_d = []
-
-                #get max resistances
-                max_U = np.amax(raw_data_u,0)
-                max_D = np.amax(raw_data_d,0)
-                #get indexes
-                max_U_i = np.where(raw_data_u[:,1] == max_U[1])[0]
-                max_D_i = np.where(raw_data_d[:,1] == max_D[1])[0]
-                #take middle index if multiple
-                max_U_i = max_U_i[int(np.floor(len(max_U_i)/2))]
-                max_D_i = max_D_i[int(np.floor(len(max_D_i)/2))]
-
-                for gv in self.GATE_VOLTAGES:
-                    di = int(gv / DX)
-
-                    if (max_U_i + di > len(raw_data_u)) or (max_U_i + di < 0):
-                        print(str(gv) + " V outside of U bounds.")
-                        self.rvg_u.append(np.nan)
-                    else:
-                        self.rvg_u.append(raw_data_u[max_U_i + di,1])
-
-                    if (max_D_i + di > len(raw_data_d) or (max_D_i + di < 0)):
-                        print(str(gv) + " V outside of D bounds.")
-                        self.rvg_d.append(np.nan)
-                    else:
-                        self.rvg_d.append(raw_data_d[max_D_i + di,1])
-                return
-
-            def plotRvG(self):
-                fig, (ax1) = plt.subplots(1,1)
-                ax1.scatter(self.GATE_VOLTAGES, self.rvg_u, label="→", s=2)
-                ax1.scatter(self.GATE_VOLTAGES, self.rvg_d, label="←", s=2)
-                #Setup Axis Labels and Legends
-                handles, labels = ax1.get_legend_handles_labels()
-                fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.2,0.5), loc = "center")
-                ax1.set_title("Electronic transport")
-                ax1.set_xlabel("Gate Voltage (V)")
-                # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-                ax1.set_ylabel(r"Resitivity ($\Omega$)")
-                ax1.tick_params(direction="in")
-
-
-        self.sampled_vg_data = vg_points(self.RAW_DATA_U, self.RAW_DATA_D, self.DX)
-        return self.sampled_vg_data
-
-    def plotRvG(self):
-        if self.RAW_DATA_U is not None:
-            #Plot data
-            fig, (ax1) = plt.subplots(1,1)
-            ax1.scatter(self.RAW_DATA_U[:,0], self.RAW_DATA_U[:,1], label="→ " + "{:.2f} K".format(self.TEMP_MEAN), s=2)
-            ax1.scatter(self.RAW_DATA_D[:,0], self.RAW_DATA_D[:,1], label="← " + "{:.2f} K".format(self.TEMP_MEAN), s=2)
-            #Setup Axis Labels and Legends
-            # handles, labels = ax1.get_legend_handles_labels()
-            # fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.05,0.5), loc = "center")
-            ax1.set_title("Electronic transport")
-            ax1.set_xlabel("Gate Voltage (V)")
-            # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-            ax1.set_ylabel(r"Resistivity ($\Omega$)")
-            ax1.tick_params(direction="in")
-            return ax1
-        else:
-            return None
-
-    def plotCvG(self, ax = None, c1 = None, c2 = None, s=1, up=True, down = True):
-        if self.RAW_DATA_U is not None and self.RAW_DATA_D is not None:
-            #Plot data
-            if ax is None:
-                fig, (ax1) = plt.subplots(1,1)
+class Graphene_Gated():
+    def mobility_dtm_peaks(data, order=10):
+        """Uses the "shoulders" of the DTM curve near the minimum conductivity
+        (corresponding to a minima in the DTM curve) to find mobility values for
+        electrons and holes in graphene.
+        Data should be a 1D array of mobilities corresponding to low to high gate
+        voltages that span the Dirac point. The default order 10 parameter is good
+        for gate voltage increments of about 0.1 V.
+        Return a tuple (i_holes, i_elec) that has the index of mobility peaks
+        corresponding to holes and electrons respectively. """
+        #Find local mobility maxima:
+        maxima=argrelextrema(data, np.greater, order=order)[0]
+        #Get minima location:
+        minPos = argrelextrema(data,np.less,order=10)[0]
+        minI = np.where(data==np.min(data[minPos]))[0][0]
+        #Get next maxima index after and before minima.
+        above_I = np.where(maxima > minI)[0]
+        if above_I.shape[0] == 0:
+            #Above value not found. Check lower ValueError
+            below_I = np.where(maxima < minI)[0]
+            if below_I.shape[0] == 0:
+                return (None, None)
             else:
-                ax1 = ax
-            if up:
-                ax1.scatter(self.RAW_DATA_U[:,0], np.reciprocal(self.RAW_DATA_U[:,1]), label="→ " + "{:.0f} K".format(self.TEMP_MEAN), s=s, c=c1)
-            if down:
-                ax1.scatter(self.RAW_DATA_D[:,0], np.reciprocal(self.RAW_DATA_D[:,1]), label="← " + "{:.0f} K".format(self.TEMP_MEAN), s=s, c=c2)
-            #Setup Axis Labels and Legends
-            # handles, labels = ax1.get_legend_handles_labels()
-            # fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.05,0.5), loc = "center")
-            ax1.set_title("Electronic transport")
-            ax1.set_xlabel("Gate Voltage (V)")
-            # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-            ax1.set_ylabel("Conductivity (x$10^{-3}$ S)")
-            ax1.tick_params(direction="in")
-
-            scale_y = 1e-3
-            ticks_y = ticker.FuncFormatter(lambda y, pos: '{0:g}'.format(y/scale_y))
-            ax1.yaxis.set_major_formatter(ticks_y)
-            return ax1
+                below_I = below_I[-1]
+                return (maxima[below_I], None)
         else:
-            return None
+            above_I = above_I[0]
+            if above_I == 0:
+                return (None, maxima[above_I])
+            else:
+                return (maxima[above_I-1], maxima[above_I])
+    #
+    # def n_imp(mobility, k_eff = 4):
+    #     """
+    #     Requires field effect mobility, and effective local dielectric constant (kappa) to calculate.
+    #     Assuming mobility in units of cm^2/Vs.
+    #     Default dielectric constant is 4, close to the value of SiO2.
+    #     According to theory by Adam et al. https://www.pnas.org/content/104/47/18392
+    #
+    #     """
+    #     e = 1.602e-19
+    #     hb = 1.05457e-34
+    #     h = hb * 2 * math.pi
+    #
+    #     def Rs(kappa):
+    #         gamma = 0.000067431
+    #         return math.pow(e,2)/(hb * gamma * kappa)
+    #
+    #     def G(x):
+    #         return np.reciprocal(np.power(x,2)) * (math.pi/4 + 3*x - (3 * math.pi * np.power(x,2)/2)
+    #             + (x * (3 * np.power(x,2) -2) / np.sqrt(np.power(x,2) -1)) * np.acos(np.reciprocal(x)))
+    #
+    #     #Using \mu = \sigma / n / e
+    #     n_imp = e / h * np.reciprocal(mobility / 1e4) * (2 / G(2 * Rs(k_eff)))
+    #
+    #     return n_imp
+    #
+    #
+    # def n_star(minimum_cond, n_imp):
+    #      return
 
-    def fitDataU(self, p0=None):
-        if p0 is None:
-            return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2])
-        else:
-            return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2], p0=p0)
 
-    def fitDataD(self, p0=None):
-        if p0 is None:
-            return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2])
-        else:
-            return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2], p0=p0)
+class Graphene_Phonons():
+    # Fitting functions
+    def rho_LA(temp, Da = 3.0):
+    """ Models longitudinal acoustic phonon intrinsic in graphene.
+        Reffered to as rho_A in https://www.nature.com/articles/nnano.2008.58
+    """
+        # Constants
+        kB      = 1.38e-23 #m^2 kg s^-2 K^-1
+        rho_s   = 7.6e-7 #kg/m^2
+        vf      = 1e6 #m/s
+        vs      = 2.1e4 #m/s
+        e       = 1.60217662e-19 #C
+        h       = 6.62607004e-34
+        # Value
+        return (h / np.power(e,2)) * (np.power(np.pi,2) * np.power(Da * e, 2) * kB * temp) / (2 * np.power(h,2) * rho_s * np.power(vs * vf, 2))
 
-    def fitDataU_gauss(self, p0=None):
-        if p0 is None:
-            return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2])
-        else:
-            return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2], p0=p0)
+    def rho_ROP_SiO2(temp, vg, params = (1,2)): #Params: (A1, B1)
+    """ Models contribution of remote surface optical phonons,
+        caused by SiO2 in proximity to graphene.
+        Reffered to as rho_B1 in https://www.nature.com/articles/nnano.2008.58.
+    """
+        # Constants
+        e = 1.60217662e-19 #C
+        kB = 1.38e-23 #m^2 kg s^-2 K^-1
+        h = 6.62607004e-34
 
-    def fitDataD_gauss(self, p0=None):
-        if p0 is None:
-            return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2])
-        else:
-            return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2], p0=p0)
+        a1,B1 = params
+
+        expFactor = (np.reciprocal(np.exp(e * 59e-3 / kB * np.reciprocal(temp)) - 1) + 6.5 * (np.reciprocal(np.exp(e * 155e-3 / kB * np.reciprocal(temp)) - 1)))
+        c1 = B1 * h / np.power(e,2)
+        c2 = np.power(np.abs(vg + 0.001), -a1)
+        coefFactor = c1 * c2
+        return expFactor * coefFactor
+
+    def rho_ROP_Generic(temp, vg, params = (1,2,120e-3)): #Params: (A1, B1, E0)
+    """ Models contribution of remote surface optical phonons,
+        caused an abitrary single optical mode in proximity to graphene.
+        Reffered to as rho_B2 in https://www.nature.com/articles/nnano.2008.58.
+    """
+        e = 1.60217662e-19 #C
+        kB = 1.38e-23 #m^2 kg s^-2 K^-1
+        h = 6.62607004e-34
+
+        a1,B1,E0 = params
+
+        expFactor = (np.reciprocal(np.exp(e * E0 / kB * np.reciprocal(temp)) - 1))
+        c1 = (B1 * h / np.power(e,2))
+        c2 = np.power(np.abs(vg + 0.001), -a1)
+        coefFactor = c1 * c2
+        return expFactor * coefFactor
+
+    def rho_Graphene_on_SiO2(X, *p):
+    """ Fitting function for Graphene on SiO2
+    """
+        #Expand 1D temp and vg lists from tuple.
+        temp, vg = X
+        #Expand parameters to count amount of gate voltages.
+        Da, a1, B1, *R0 = p
+        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
+        vg_steps = len(R0)
+        temp_steps = len(temp)/vg_steps
+
+        #Setup new matrix for returning generated values.
+        retVal = np.zeros(temp.shape)
+        for i in range(0,vg_steps):
+            #Define indexes of 2D data along 1D dimension
+            i1=int(0+i*temp_steps)
+            i2=int((i+1)*temp_steps)
+            #Calculate each set of indexes
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_A(temp[i1:i2], Da) + Graphene_Phonons.rho_B1(temp[i1:i2],vg[i1:i2],(a1,B1))
+        return retVal
+
+    def rho_T(X, Da, a1, B1, R0):
+        temp, vg = X
+        return R0 + Graphene_Phonons.rho_A(temp, Da) + Graphene_Phonons.rho_B1(temp,vg,(a1,B1))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    #
+    # def fitDataU(self, p0=None):
+    #     if p0 is None:
+    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2])
+    #     else:
+    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2], p0=p0)
+    #
+    # def fitDataD(self, p0=None):
+    #     if p0 is None:
+    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2])
+    #     else:
+    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2], p0=p0)
+    #
+    # def fitDataU_gauss(self, p0=None):
+    #     if p0 is None:
+    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2])
+    #     else:
+    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2], p0=p0)
+    #
+    # def fitDataD_gauss(self, p0=None):
+    #     if p0 is None:
+    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2])
+    #     else:
+    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2], p0=p0)
 
 ### ----------------------------------------------------------------------------------------------------------------------------- ###
 ### ----------------------------------------------------------------------------------------------------------------------------- ###
@@ -617,65 +600,7 @@ class RvT_data():
         ax1.tick_params(direction="in")
         return ax1
 
-    #Fitting functions
-    def rho_A(temp, Da = 3.0):
-        kB = 1.38e-23 #m^2 kg s^-2 K^-1
-        rho_s = 7.6e-7 #kg/m^2
-        vf = 1e6 #m/s
-        vs=2.1e4 #m/s
-        e = 1.60217662e-19 #C
-        h = 6.62607004e-34
 
-        return (h / np.power(e,2)) * (np.power(np.pi,2) * np.power(Da * e, 2) * kB * temp) / (2 * np.power(h,2) * rho_s * np.power(vs * vf, 2))
-
-    def rho_B1(temp, vg, params = (1,2)): #Params: (A1, B1)
-        e = 1.60217662e-19 #C
-        kB = 1.38e-23 #m^2 kg s^-2 K^-1
-        h = 6.62607004e-34
-
-        a1,B1 = params
-
-        expFactor = (np.reciprocal(np.exp(e * 59e-3 / kB * np.reciprocal(temp)) - 1) + 6.5 * (np.reciprocal(np.exp(e * 155e-3 / kB * np.reciprocal(temp)) - 1)))
-        c1 = B1 * h / np.power(e,2)
-        c2 = np.power(np.abs(vg + 0.001), -a1)
-        coefFactor = c1 * c2
-        return expFactor * coefFactor
-
-    def rho_B2(temp, vg, params = (1,2,120e-3)): #Params: (A1, B1, E0)
-        e = 1.60217662e-19 #C
-        kB = 1.38e-23 #m^2 kg s^-2 K^-1
-        h = 6.62607004e-34
-
-        a1,B1,E0 = params
-
-        expFactor = (np.reciprocal(np.exp(e * E0 / kB * np.reciprocal(temp)) - 1))
-        c1 = (B1 * h / np.power(e,2))
-        c2 = np.power(np.abs(vg + 0.001), -a1)
-        coefFactor = c1 * c2
-        return expFactor * coefFactor
-
-    def rho_T_1D(X, *p):
-        #Expand 1D temp and vg lists from tuple.
-        temp, vg = X
-        #Expand parameters to count amount of gate voltages.
-        Da, a1, B1, *R0 = p
-        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
-        vg_steps = len(R0)
-        temp_steps = len(temp)/vg_steps
-
-        #Setup new matrix for returning generated values.
-        retVal = np.zeros(temp.shape)
-        for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
-            retVal[i1:i2] = R0[i] + RvT_data.rho_A(temp[i1:i2], Da) + RvT_data.rho_B1(temp[i1:i2],vg[i1:i2],(a1,B1))
-        return retVal
-
-    def rho_T(X, Da, a1, B1, R0):
-        temp, vg = X
-        return R0 + RvT_data.rho_A(temp, Da) + RvT_data.rho_B1(temp,vg,(a1,B1))
 
     # Fitting
     class fitParamsRvT1():
@@ -709,48 +634,4 @@ class RvT_data():
             ax1.tick_params(direction="in")
             return ax1
 
-    def global_fit_RvT(temp, vg, data, params = (3, 1, 2, 50), R0s_guess = None): #Da, A1, B1, R0
-        #Global Fit Variables
-        Da = params[0]
-        a1 = params[1]
-        B1 = params[2]
-
-        #Reshape inputs: First index is temp, second index is vg
-        T = np.array([np.array(temps) for i in range(len(vg))], dtype=float) #Resize temp list for each vg.
-        VG = np.array([np.array(vg) for i in range(len(temps))], dtype=float).T #Resize VG list for each temp.
-        #Reshape inputs into 1D arrays:
-        T_1D = np.reshape(T, (-1))
-        VG_1D = np.reshape(VG, (-1))
-        data_1D = np.reshape(data.T, (-1))
-
-        #Independent Fit Variables:
-        R = []
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            #Each Vg has an offset resistance R0:
-            if R0s_guess is not None and len(R0s_guess) == len(vg):
-                R.append(R0s_guess[i])
-            else:
-                R.append(params[3])
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = tuple(R)
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-
-        #Bounds
-        defaultBoundsL = [0.1,0.1,0.1] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 25] + list(Rupper)
-
-        x0 = [Da, a1, B1]
-        x0 += list(R)
-        x0 = tuple(x0)
-        fitdata = data.copy().astype(float)
-        params, covar = opt.curve_fit(RvT_data.rho_T_1D, xdata=(T_1D, VG_1D), ydata=np.array(data_1D,dtype=float), p0=x0 ,bounds=(defaultBoundsL, defaultBoundsU))
-
-        fitObj = RvT_data.fitParamsRvT1(params, vg, temps)
-        fitObj.fitted = True
-        fitObj.fitparams = params
-        fitObj.fitcovar = covar
-        return fitObj
+    
