@@ -17,7 +17,7 @@ import math
 
 # from pylectric.materials.graphene import RVG_data, fitParamsRvG, fitSet, RvT_data
 from pylectric.parsers.RVG import RVG_file
-from pylectric.geometries.FET.hallbar import Meas_GatedResistance
+from pylectric.geometries.FET.hallbar import Meas_GatedResistance, Meas_Temp_GatedResistance
 from pylectric.materials import graphene, sio2
 
 ### ----------------------------------------------------------------------------------------------------------------------------- ###
@@ -57,7 +57,7 @@ files = [f for f in os.listdir(DIRPATH) if os.path.isfile(DIRPATH + "\\" + f) an
 file_data_objs = []
 for file in files:
     data_obj = RVG_file(filepath=DIRPATH + "\\" + file)
-    fig = data_obj.plot_all()
+    # fig = data_obj.plot_all()
     file_data_objs.append(data_obj)
 
 ###         Phonon RVGVT ANALYSIS           ###
@@ -65,19 +65,18 @@ for file in files:
 target2 = os.getcwd() + RAW_DATA_DIR + "\\" + FILE_DESCRIPTOR + "\\" + "00 Mobility-DTM Aquisition" + "\\"
 if not os.path.isdir(target2):
     os.mkdir(target2)
-#Get average temperatures
-temps = []
+
 #Setup graphing
 ud_labels = ["→","←"]
 plt.rcParams.update({'font.size': 3, "figure.figsize" : [3,2], 'figure.dpi':300})
 #Calculate SiO2 capacitance for mobility calculation.
 SiO2_Cg = sio2.SiO2_Properties.capacitance(thickness=2.85e-7)
-#Calculate mobility:
-meas_objs = []
-# obj = file_data_objs[0]
 
-#Setup sets of discritized set of gate voltages and resistances
+temps = [] #Get average temperatures
+meas_objs = [] #Setup sets of discritized set of gate voltages and resistances
 rvg_sets = [] #Axis are [Temperature, Up/Down, Voltage Delta, Voltage | Resistance]
+vgs = np.linspace(10,30,6) #10 voltages, 5-50 includive.
+# obj = file_data_objs[0]
 for obj in file_data_objs:
     #Get raw measurement object
     datasets = obj.split_dataset_by_voltage_turning_point()
@@ -85,13 +84,12 @@ for obj in file_data_objs:
     data_items = []
     rvg_items = []
     #Setup sampling voltages
-    vgs = np.linspace(5,30,6) #10 voltages, 5-50 includive.
     i = 0
     for i in range(len(datasets)):
         #Calculate average temperature of dataset
         t.append(np.mean(datasets[i][:,4]))
         #Create gated measurement object.
-        meas_obj = Meas_GatedResistance(datasets[i], 200, 400, SiO2_Cg)
+        meas_obj = Meas_GatedResistance(data=datasets[i], Cg=SiO2_Cg, L=200, W=400)
         data_items.append(meas_obj)
         #Extract sampled voltages away from dirac point = conductivity minimum.
         min_i = meas_obj.conductivity_min()
@@ -101,6 +99,7 @@ for obj in file_data_objs:
     temps.append(t)
     meas_objs.append(data_items)
     rvg_sets.append(rvg_items)
+
 temps = np.array(temps)
 rvg_sets
 rvg_sets2 = np.array(rvg_sets)
@@ -110,7 +109,7 @@ t1,t2 = (3, 23)
 rvg_sets3 = rvg_sets2[t1:t2]
 temps3 = temps[t1:t2,:]
 
-#Plot the data:
+#Generate colour cycles.
 colourCycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
 colourCycle2 = []
 hexa = colourCycle[0]
@@ -119,7 +118,7 @@ for hexa in colourCycle:
     hex_dark = "#" + "".join(["{:02x}".format(RGB_dark[i]) for i in (0,1,2)])
     colourCycle2.append(hex_dark)
 cycles = (colourCycle2, colourCycle)
-# sweep=0
+# Plot the data:
 fig, (ax) = plt.subplots(1,1)
 for sweep in range(rvg_sets3.shape[1]):
     # vgi = 1
@@ -133,4 +132,35 @@ ax.set_yscale("log")
 handles, labels = ax.get_legend_handles_labels()
 ax.get_figure().legend(handles, labels, title="Legend", bbox_to_anchor=(1.05,0.5), loc = "center")
 
+colourCycle
+
 #FIT Data
+temps3.shape
+vgs.shape
+rvg_sets3.shape
+rvt_obj_u = Meas_Temp_GatedResistance(temps = temps3[:,0], vg=vgs, resistivity=rvg_sets3[:,0,:,1])
+rvt_obj_d = Meas_Temp_GatedResistance(temps = temps3[:,1], vg=vgs, resistivity=rvg_sets3[:,1,:,1])
+temps_comb = np.concatenate((temps3[:,1],temps3[:,0]), axis=0)
+temps_comb.shape
+rvg_sets3_comb = np.concatenate((rvg_sets3[:,1,:,1], rvg_sets3[:,0,:,1]),axis=0)
+rvg_sets3_comb.shape
+rvt_obj_comb = Meas_Temp_GatedResistance(temps = temps_comb, vg=vgs, resistivity=rvg_sets3_comb)
+
+paramsu, covaru = graphene.Graphene_Phonons.fit_Graphene_on_SiO2(rvt_obj_u)
+paramsu
+
+paramsd, covard = graphene.Graphene_Phonons.fit_Graphene_on_SiO2(rvt_obj_d)
+paramsd
+
+paramsc, covarc = graphene.Graphene_Phonons.fit_Graphene_on_SiO2(rvt_obj_comb)
+paramsc
+
+rvt_obj_u.global_RTVg_plot(function=graphene.Graphene_Phonons.rho_Graphene_on_SiO2, params=tuple(paramsu), ax=ax, c=colourCycle2, linewidth=0.3)
+rvt_obj_d.global_RTVg_plot(function=graphene.Graphene_Phonons.rho_Graphene_on_SiO2, params=tuple(paramsd), ax=ax, c=colourCycle, linewidth=0.3)
+rvt_obj_comb.global_RTVg_plot(function=graphene.Graphene_Phonons.rho_Graphene_on_SiO2, params=tuple(paramsc), ax=ax, c=colourCycle, points=30, linewidth=0.3, style="--")
+
+
+paramsc, covarc = graphene.Graphene_Phonons.fit_Graphene_on_Dielectric(rvt_obj_comb)
+
+
+graphene.Graphene_Phonons

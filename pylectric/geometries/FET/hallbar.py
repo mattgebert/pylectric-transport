@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 from pylectric.analysis import mobility
+from scipy import optimize as opt
 
 class Meas_GatedResistance():
     """Class to handle a single sweep of raw data. Measures resistance against gate voltage to infer properties."""
@@ -16,7 +17,7 @@ class Meas_GatedResistance():
         """
 
         #1. Cols = [V_gate, Resistance]
-        self.raw_data = np.array(data).copy()
+        self.raw_data = np.array(data, np.longfloat).copy()
         self.conductivity_data = self.raw_data.copy()[:,0:2]
         self.conductivity_data[:,1] = np.reciprocal(self.conductivity_data[:,1] * W / L) if D is None else np.reciprocal(self.conductivity_data[:,1] * W * D / L)
         self.L = L
@@ -58,9 +59,9 @@ class Meas_GatedResistance():
 
     def discrete_sample_voltages(self, gate_voltages=None, center_voltage = 0, tollerance = 0.01):
         """
-            Acquires a subset of gate voltages, useful for tracking temperature
-            dependent behaviour over multiple samples.
-            Matches requested voltages to within tollerance, from a central voltage.
+            Acquires a subset of resitivities, corresponding to gate voltages.
+            Useful for tracking temperature behaviour over multiple samples.
+            Matches requested voltage to within tollerance, from a central voltage.
         """
         #Default sampling if no list provided.
         if gate_voltages is None:
@@ -71,17 +72,18 @@ class Meas_GatedResistance():
 
         #Find
         for gv in gate_voltages:
-            vdelta = np.abs(self.raw_data[:,0] - center_voltage - gv)
+            vdelta = np.abs(self.conductivity_data[:,0] - center_voltage - gv)
             v_i = np.where(vdelta == np.min(vdelta))[0][0]
             if vdelta[v_i] < tollerance:
-                rvg_sampled.append([self.raw_data[v_i,0]-center_voltage, self.raw_data[v_i,1]])
+                #Offset center voltage, and take reciporical of conductivity for resistivity.
+                rvg_sampled.append([self.conductivity_data[v_i,0]-center_voltage, 1.0/self.conductivity_data[v_i,1]])
             else:
                 rvg_sampled.append([gv, np.nan]) #Add a NAN value to the array because value out of range.
 
         rvg_sampled = np.array(rvg_sampled)
         return rvg_sampled
 
-    def _scatterVG(data, ax = None, s=1, c=None):
+    def __scatterVG(data, ax = None, s=1, c=None):
         if ax is None:
             fig, (ax1) = plt.subplots(1,1)
         else:
@@ -103,7 +105,7 @@ class Meas_GatedResistance():
     def plot_R_vG(self, ax = None, c = None, s=1, label=""):
         """Plots the raw resistance data versus gate voltage"""
         # Plot Resistance
-        ax1 = self._scatterVG(self.raw_data[:,0:2], ax=ax, s=s, c=c)
+        ax1 = self.__scatterVG(self.raw_data[:,0:2], ax=ax, s=s, c=c)
         # Generate Label
         ax1.set_ylabel("Resistance ($\Omega$)")
         return ax1
@@ -113,7 +115,7 @@ class Meas_GatedResistance():
         # Calculate resistivity
         Rho = np.reciprocal(self.conductivity_data[:,1])
         # Plot restivitiy
-        ax1 = self._scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c)
+        ax1 = self.__scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c)
         # Generate 2D/3D Label
         ax1.set_ylabel("Resisitivity ($\Omega$)") if self.is2D else ax1.set_ylabel("Resisitivity ($\Omega$ cm)")
         return ax1
@@ -123,14 +125,14 @@ class Meas_GatedResistance():
         # Calculate conductance
         conductance = np.reciprocal(self.raw_data[:,1])
         # Plot conductance
-        ax1 = self._scatterVG(np.c_[self.raw_data[:,0], conductance], ax=ax, s=s, c=c)
+        ax1 = self.__scatterVG(np.c_[self.raw_data[:,0], conductance], ax=ax, s=s, c=c)
         # Generate Label
         ax1.set_ylabel("Conductivity (x$10^{-3}$ S cm$^{1}$)")
         return
 
     def plot_Sigma_vG(self, ax = None, c1 = None):
         """Plots the scaled conductivity data versus gate voltage"""
-        ax1 = self._scatterVG(self.conductivity_data[:,0:2], ax=ax, s=s, c=c)
+        ax1 = self.__scatterVG(self.conductivity_data[:,0:2], ax=ax, s=s, c=c)
         ax1.set_ylabel("Conductivity ($\Omega$)") if self.is2D else ax1.set_ylabel("Conductivity (x$10^{-3}$ S cm$^{1}$)")
         return
 
@@ -149,54 +151,87 @@ class Meas_Temp_GatedResistance():
             raise ValueError("Dimension mismatch: Temperature and gate voltage arrays didn't match dimensions of resisitivty array.")
         return
 
-    def global_fit_RTVg():
+    def plot_Rho_vT(self, function, params, labels=None, ax=None, c=None, s=1):
+        """ Generic scatter plot for resistance vs gate voltage.
+            Colours length has to match length of voltages.
+        """
+        if c is not None and (len(self.vg) != len(c) or len(self.vg) != len(labels)):
+            raise(AttributeError("There is a mismatch betweeen the number of colours (" + len(c) +"), voltages (" + len(self.vg) + "), and labels (" + str(len(labels)) + ")."))
+        for i in range(len(self.vg)):
+            vg = self.vg[i]
+            if lable is None:
+                ax.scatter(self.temps, self.resistivity[:,i], s=1, c = c[i])
+            else:
+                ax.scatter(self.temps, self.resistivity[:,i], s=1, c = c[i], label=labels[i])
         return
 
-    def _fit(temp, vg, data, params = (3, 1, 2, 50), R0s_guess = None): #Da, A1, B1, R0
-        #Global Fit Variables
-        Da = params[0]
-        a1 = params[1]
-        B1 = params[2]
+    def global_RTVg_fit(self, fit_function, params, boundsU=None, boundsL=None):
+        """ Public function for globally fitting to the RTVg data.
+            Fits to initial provided temperature and gate voltage dependent resistivity.
+        """
+        return Meas_Temp_GatedResistance.__fit(temps=self.temps, vg=self.vg, data=self.resistivity, fit_function=fit_function, x0=params, boundsU=boundsU, boundsL=boundsL)
+
+    def global_RTVg_plot(self, function, params, ax=None, c=None, linewidth=1, labels=None, points=100, style=''):
+        """ Generic plotting function for parameter set of function.
+            Similar to __fit, requires
+        """
+        if ax is None:
+            fig, (ax1) = plt.subplots(1,1)
+        else:
+            ax1 = ax
+        ax1.set_title("Electronic transport")
+        ax1.set_xlabel("Temperature (K)")
+        ax1.tick_params(direction="in")
+
+        max_t = np.max(self.temps)
+        min_t = np.min(self.temps)
+        fit_temps = np.linspace(min_t, max_t, points) #Arbitrary 200 plot points to look smooth.
 
         #Reshape inputs: First index is temp, second index is vg
-        T = np.array([np.array(temps) for i in range(len(vg))], dtype=float) #Resize temp list for each vg.
-        VG = np.array([np.array(vg) for i in range(len(temps))], dtype=float).T #Resize VG list for each temp.
+        T = np.array([np.array(fit_temps) for i in range(len(self.vg))], dtype=np.longfloat) #Resize temp list for each vg.
+        VG = np.array([np.array(self.vg) for i in range(len(fit_temps))], dtype=np.longfloat).T #Resize VG list for each temp.
+
+        #Reshape inputs into 1D arrays:
+        T_1D = np.reshape(T, (-1))
+        VG_1D = np.reshape(VG, (-1))
+        X = (T_1D, VG_1D)
+        #Calculate function output
+        param_resistivity = function(X, *params)
+
+        #Plot result
+        if c is None:
+            c = plt.rcParams['axes.prop_cycle'].by_key()['color']
+        for i in range(len(self.vg)):
+            param_resistivity_subset = param_resistivity[i*len(fit_temps):(i+1)*len(fit_temps)]
+            if labels is None:
+                ax1.plot(fit_temps, param_resistivity_subset, style, linewidth=linewidth, label=str(self.vg[i]), c=c[i])
+            else:
+                ax1.plot(fit_temps, param_resistivity_subset, style, linewidth=linewidth, label=labels[i], c=c[i])
+        return
+
+    def __fit(temps, vg, data, fit_function, x0, boundsU=None, boundsL=None):
+        """ Private method to generate a fit to RVT data, not object specific.
+            Requires 1D arrays of temperature, gate voltage, and a 2D matching array of data.
+            This function reshapes into a 1D array for T, VG and Data, for the curve fit method to run.
+        """
+
+        #Reshape inputs: First index is temp, second index is vg
+        T = np.array([np.array(temps) for i in range(len(vg))], dtype=np.longfloat) #Resize temp list for each vg.
+        VG = np.array([np.array(vg) for i in range(len(temps))], dtype=np.longfloat).T #Resize VG list for each temp.
         #Reshape inputs into 1D arrays:
         T_1D = np.reshape(T, (-1))
         VG_1D = np.reshape(VG, (-1))
         data_1D = np.reshape(data.T, (-1))
 
-        #Independent Fit Variables:
-        R = []
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            #Each Vg has an offset resistance R0:
-            if R0s_guess is not None and len(R0s_guess) == len(vg):
-                R.append(R0s_guess[i])
-            else:
-                R.append(params[3])
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = tuple(R)
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
 
-        #Bounds
-        defaultBoundsL = [0.1,0.1,0.1] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 25] + list(Rupper)
-
-        x0 = [Da, a1, B1]
-        x0 += list(R)
-        x0 = tuple(x0)
         fitdata = data.copy().astype(float)
-        params, covar = opt.curve_fit(RvT_data.rho_T_1D, xdata=(T_1D, VG_1D), ydata=np.array(data_1D,dtype=float), p0=x0 ,bounds=(defaultBoundsL, defaultBoundsU))
+        params, covar = opt.curve_fit(fit_function, xdata=(T_1D, VG_1D), ydata=np.array(data_1D,dtype=np.longfloat), p0=x0 ,bounds=(boundsL, boundsU))
 
-        fitObj = RvT_data.fitParamsRvT1(params, vg, temps)
-        fitObj.fitted = True
-        fitObj.fitparams = params
-        fitObj.fitcovar = covar
-        return fitObj
+        # fitObj = RvT_data.fitParamsRvT1(params, vg, temps)
+        # fitObj.fitted = True
+        # fitObj.fitparams = params
+        # fitObj.fitcovar = covar
+        return params, covar
 
 
 
