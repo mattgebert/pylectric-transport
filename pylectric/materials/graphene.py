@@ -1,10 +1,10 @@
-__version__ = "0.0.1" #initial dump
+__version__ = "0.1.0" #Re-worked temperature and gated behaviour.
 
 from scipy.signal import savgol_filter, argrelextrema
 import numpy as np
 import math
 from pylectric.geometries.FET import hallbar
-from pylectric.geometries.FET.hallbar import Meas_Temp_GatedResistance
+from pylectric.geometries.FET.hallbar import Meas_GatedResistance, Meas_Temp_GatedResistance
 
 class Graphene_Gated():
     def mobility_dtm_peaks(data, order=10):
@@ -37,6 +37,84 @@ class Graphene_Gated():
                 return (None, maxima[above_I])
             else:
                 return (maxima[above_I-1], maxima[above_I])
+
+
+    def sigma_graphene(vg, *p0):
+        """ Models impurity dominated conductivity in graphene.
+            Parameters include:
+            1. sigma_pud_e  -   Puddling charge that gives an effective minimum conductivity.
+            2. mu_e         -   Electron (+ve Vg) gate mobility.
+            3. mu_h         -   Hole (-ve Vg) gate mobility.
+            4. rho_s_e      -   Short range scattering (electron-electron interactions) at high carrier density.
+            5. rho_s_h      -   Short range scattering (hole-hole interactions) at high carrier density.
+            6. vg_dirac     -   Dirac point (volts).
+            7. pow          -   A power index describing the curvature from carrier
+                                dominated transport to puddling regime.
+        """
+
+        #Expand parameters
+        sigma_pud_e, mu_e, mu_h, rho_s_e, rho_s_h, vg_dirac, pow = p0
+
+        #Define Constants
+        EPSILON_0 = 8.85e-12    #natural permissitivity constant
+        EPSILON_SiO2 = 3.8      #relative sio2 permissivity factor
+        e = 1.6e-19             #elementary chrage
+        t_ox = 2.85e-7          #oxide thickness
+
+        # -- Calculate terms --
+        #Gate capacitance
+        Cg = EPSILON_0 * EPSILON_SiO2 / t_ox / 10000 #10000 is to change from metric untis into units of cm^2.
+        #Field effect carrier density
+        N_c = Cg / e * np.abs(vg-vg_dirac)
+        #Interred hole puddle density due to electron fit.
+        sigma_pud_h = 1/(rho_s_e - rho_s_h + 1/sigma_pud_e)
+        #electron and hole conductivity
+        sigma_h = 1 / (rho_s_h + np.power(1/(np.power((sigma_pud_h),pow) + np.power(N_c * e * mu_h,pow)),1/pow))
+        sigma_e = 1 / (rho_s_e + np.power(1/(np.power((sigma_pud_e),pow) + np.power(N_c * e * mu_e,pow)),1/pow))
+        #carrier condition for fitting (electrons, or holes)
+        carrier_cond = [vg > vg_dirac, vg <= vg_dirac]
+        #gate dependent conductivity
+        sigma = np.select(carrier_cond, [sigma_e, sigma_h])
+        return sigma
+
+    def fit_sigma_graphene(MGR_Obj, windows = 3):
+        """ Fits conductivity data for graphene of a MGR_Obj.
+            Dirac point should be within the data range of the window,
+            as fitting is to @sigma_graphene asymmetric parameters. This is
+            lightly enforced by using bounds on input dataset to within "windows" x
+            voltage window.
+        """
+        if not type(MGR_Obj) is Meas_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_GatedResistance. Is intead: " + str(MGR_Obj.__class__())))
+            return
+
+        ###Initial Values
+        #Get initial values for minimum conductivity and gate voltage.
+        min_sigma_i = np.where(MGR_Obj.conductivity_data[:,1] == np.min(MGR_Obj.conductivity_data[:,1]))[0][0] #Find min index for conductivity
+        #Fit Variables:
+        vg_dirac = MGR_Obj.conductivity_data[min_sigma_i,0]
+        sigma_pud_e = MGR_Obj.conductivity_data[min_sigma_i,1]
+        #Default params:
+        mu_e, mu_h = (1000,1000)
+        rho_s_e, rho_s_h = (50,50)
+        pow = 2.85
+        #Pack initial values.
+        x0 = (sigma_pud_e, mu_e, mu_h, rho_s_e, rho_s_h, vg_dirac, pow)
+
+        ###Bounds
+        #Find max and min voltages
+        min_v_i = np.where(MGR_Obj.conductivity_data[:,0] == np.min(MGR_Obj.conductivity_data[:,0]))[0][0] #Find min index for gate voltage
+        max_v_i = np.where(MGR_Obj.conductivity_data[:,0] == np.max(MGR_Obj.conductivity_data[:,0]))[0][0] #Find max index for gate voltage
+        v_window = windows * (MGR_Obj.conductivity_data[max_v_i:,0] - MGR_Obj.conductivity_data[min_v_i, 0])
+        #Pack bounds
+        #                (sigma_pud_e, mu_e, mu_h, rho_s_e, rho_s_h, vg_dirac, pow)
+        defaultBoundsL = [1e-10,    1,      1,      0,      0,       vg_dirac - v_window,    1.5]
+        defaultBoundsU = [ 1e-3,    1e7,    1e7,    1e5,    1e5,    vg_dirac + v_window,    4.0]
+
+        return MGR_Obj.global_RVg_fit(Graphene_Gated.sigma_graphene, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    
+
     #
     # def n_imp(mobility, k_eff = 4):
     #     """
@@ -92,6 +170,7 @@ class Graphene_Phonons():
         # Constants
         e = 1.60217662e-19 #C
         kB = 1.38e-23 #m^2 kg s^-2 K^-1
+        # kB = 8.617333262145e-5 #eV K^-1
         h = 6.62607004e-34
 
         a1,B1 = params
@@ -109,6 +188,7 @@ class Graphene_Phonons():
         """
         e = 1.60217662e-19 #C
         kB = 1.38e-23 #m^2 kg s^-2 K^-1
+        # kB = 8.617333262145e-5 #eV K^-1
         h = 6.62607004e-34
 
         a1,B1,E0 = params
@@ -176,9 +256,38 @@ class Graphene_Phonons():
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
         return retVal
 
-    def fit_Graphene_on_SiO2(MTGR_Obj):
+    def rho_Graphene_LA(X, *p):
+        """ Fitting function for low temperature Graphene longitudinal acoustic phonons.
+            X should be a tuple of 1D arrays of temperatures and gate voltages.
+            p should be a tuple of parameters corresponding to:
+                Da, the deformation potential.
+                *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
+                Note R0 must be the same as the number of gate voltages.
+        """
+        #Expand 1D temp and vg lists from tuple.
+        temp, vg = X
+        #Expand parameters to count amount of gate voltages.
+        Da, *R0 = p
+        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
+        vg_steps = len(R0)
+        temp_steps = len(temp)/vg_steps
+
+        #Setup new matrix for returning generated values.
+        retVal = np.zeros(temp.shape)
+        for i in range(0,vg_steps):
+            #Define indexes of 2D data along 1D dimension
+            i1=int(0+i*temp_steps)
+            i2=int((i+1)*temp_steps)
+            #Calculate each set of indexes
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da)
+        return retVal
+
+
+    def fit_Graphene_LA(MTGR_Obj):
         """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of grpahene phonon modes given some RVT data fitting.
+            Allows the calculation of graphene's longitudinal acoustic phonon mode
+            given some RVT data fitting. Data should only include linear portion
+            before coupled optical modes begin to contribute.
         """
         if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
             raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
@@ -187,17 +296,12 @@ class Graphene_Phonons():
         vg = MTGR_Obj.vg
         #Get initial values for R0 for each gate voltage.
         min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:] #Each Vg has an offset resistance R0:
 
         #Independent Fit Variables:
         Rlower = [] #Bounds
         Rupper = [] #Bounds
         for i in range(len(vg)):
-            #Each Vg has an offset resistance R0:
-            # if R0s_guess is not None and len(R0s_guess) == len(vg):
-            #     R.append(R0s_guess[i])
-            # else:
-            #     R.append(initialR0s[i])
             Rlower.append(0)
             Rupper.append(20000)
         R = initialR0s.tolist()
@@ -205,9 +309,43 @@ class Graphene_Phonons():
         Rlower = tuple(Rlower)
 
         #Bounds
-        Da, a1, B1 = (18, 1, 2) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.1,0.1,0.1] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 25] + list(Rupper)
+        Da = (18) #Guesses for deformation potential
+        defaultBoundsL = [0.01] + list(Rlower)
+        defaultBoundsU = [1e6] + list(Rupper)
+
+        x0 = [Da]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_LA, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    def fit_Graphene_on_SiO2(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of graphene phonon modes given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:] #Each Vg has an offset resistance R0:
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        Da, a1, B1 = (18, 1, 5) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.01,0.01,0.01] + list(Rlower)
+        defaultBoundsU = [1e6, np.inf, 1e5] + list(Rupper)
 
         x0 = [Da, a1, B1]
         x0 += list(R)
@@ -239,502 +377,12 @@ class Graphene_Phonons():
         Rlower = tuple(Rlower)
 
         #Bounds
-        Da, a1, B1, E0 = (18, 1, 2, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        Da, a1, B1, E0 = (18, 1, 5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
         defaultBoundsL = [0.1,0.1,0.1, 1e-3] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 25, np.inf] + list(Rupper)
+        defaultBoundsU = [1e6, np.inf, 1e5, np.inf] + list(Rupper)
 
-        x0 = [Da, a1, B1]
+        x0 = [Da, a1, B1, E0]
         x0 += list(R)
         x0 = tuple(x0)
 
         return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_on_Dielectric, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    #
-    # def fitDataU(self, p0=None):
-    #     if p0 is None:
-    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2])
-    #     else:
-    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_U[:,0:2], p0=p0)
-    #
-    # def fitDataD(self, p0=None):
-    #     if p0 is None:
-    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2])
-    #     else:
-    #         return fitParamsRvG.fitRes(data=self.RAW_DATA_D[:,0:2], p0=p0)
-    #
-    # def fitDataU_gauss(self, p0=None):
-    #     if p0 is None:
-    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2])
-    #     else:
-    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_U[:,0:2], p0=p0)
-    #
-    # def fitDataD_gauss(self, p0=None):
-    #     if p0 is None:
-    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2])
-    #     else:
-    #         return fitParamsRvG.fitRes_gauss(data=self.RAW_DATA_D[:,0:2], p0=p0)
-
-### ----------------------------------------------------------------------------------------------------------------------------- ###
-### ----------------------------------------------------------------------------------------------------------------------------- ###
-#Create the fitting fiuctnion
-class fitParamsRvG():
-    def __init__(self, sigma_pud_e = 1e-4, mu_e = 1000.0, mu_h = 1000.0 , rho_s_e = 100.0, rho_s_h = 100.0, vg_dirac = 0, sigma_const = 0.0, pow = 2.85):
-        self.sigma_pud_e = sigma_pud_e
-        self.mu_e = mu_e
-        self.vg_dirac = vg_dirac
-        self.mu_h = mu_h
-        self.rho_s_e = rho_s_e
-        self.rho_s_h = rho_s_h
-        self.sigma_const = sigma_const
-        self.pow = pow
-        self.fitted = False
-        self.fitparams = None
-        self.fitcovar = None
-
-    def initCovar(self, P=None):
-        # https://stats.stackexchange.com/questions/50830/can-i-convert-a-covariance-matrix-into-uncertainties-for-variables
-        #For each element of the covariance matrix, you need to convert the diagonal element information into +- uncertainty.
-        #This can be done by simply square rooting.
-        if P is None:
-            if not hasattr(P, 'shape'):
-                raise AttributeError("Fitted parameters don't have covariance matrix, or not supplied to method.")
-            else:
-                errs = np.sqrt(np.diag(self.fitcovar))
-                self.sigma_pud_e_err, self.mu_e_err, self.vg_dirac_err, self.mu_h_err, self.rho_s_e_err, self.rho_s_h_err, self.sigma_const_err, self.pow_err = errs
-        else:
-            errs = np.sqrt(np.diag(P))
-            self.sigma_pud_e_err, self.mu_e_err, self.vg_dirac_err, self.mu_h_err, self.rho_s_e_err, self.rho_s_h_err, self.sigma_const_err, self.pow_err = errs
-        return
-
-    def fitFuncP(vg, params):
-        return fitParamsRvG.fitFunc(vg, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7])
-
-    def fitFuncP_gauss(vg, params):
-        return fitParamsRvG.fitFuncGauss(vg, params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7], params[8])
-
-    def fitFunc(vg , sigma_pud_e = 1e-4, mu_e = 1000.0, mu_h = 1000.0 , rho_s_e = 100.0, rho_s_h = 100.0, vg_dirac = 0, sigma_const = 0.0, pow = 2.85):
-
-        #Define Constants
-        EPSILON_0 = 8.85e-12    #natural permissitivity constant
-        EPSILON_SiO2 = 3.8      #relative sio2 permissivity factor
-        e = 1.6e-19             #elementary chrage
-        t_ox = 2.85e-7          #oxide thickness
-
-        # -- Calculate terms --
-        #Gate capacitance
-        Cg = EPSILON_0 * EPSILON_SiO2 / t_ox / 10000 #10000 is to change from metric untis into units of cm^2.
-        #Field effect carrier density
-        N_c = Cg / e * np.abs(vg-vg_dirac)
-        #Interred hole puddle density due to electron fit.
-        sigma_pud_h = 1/(rho_s_e - rho_s_h + 1/sigma_pud_e)
-        #electron and hole conductivity
-        sigma_h = 1 / (rho_s_h + np.power(1/(np.power((sigma_pud_h),pow) + np.power(N_c * e * mu_h,pow)),1/pow))
-        sigma_e = 1 / (rho_s_e + np.power(1/(np.power((sigma_pud_e),pow) + np.power(N_c * e * mu_e,pow)),1/pow))
-        #condition for fitting
-        cond = [vg > vg_dirac, vg <= vg_dirac]
-        #gate dependent conductivity
-        sigma = sigma_const + np.select(cond, [sigma_e, sigma_h])
-        return sigma
-
-    def fitFuncGauss(vg , sigma_pud_e = 1e-4, mu_e = 1000.0, mu_h = 1000.0 , rho_s_e = 100.0, rho_s_h = 100.0, vg_dirac = 0, sigma_const = 0.0, pow = 2.85, gauss_w=2):
-
-        #Define Constants
-        EPSILON_0 = 8.85e-12    #natural permissitivity constant
-        EPSILON_SiO2 = 3.8      #relative sio2 permissivity factor
-        e = 1.6e-19             #elementary chrage
-        t_ox = 2.85e-7          #oxide thickness
-
-        #Setup gaussian dirac point.
-        def gauss(x, p):
-            A, mu, sigma = p
-            return A*np.exp(-(x-mu)**2/(2.*sigma**2))
-
-        # -- Calculate terms --
-        #Gate capacitance
-        Cg = EPSILON_0 * EPSILON_SiO2 / t_ox / 10000 #10000 is to change from metric untis into units of cm^2.
-        #Field effect carrier density
-        N_c = Cg / e * np.abs(vg-vg_dirac)
-        #gaussian nature of dirac point:
-        gauss_e = gauss(vg,(1.0/sigma_pud_e, vg_dirac, gauss_w))
-        #Interred hole puddle density due to electron fit.
-        # sigma_pud_h = 1/(rho_s_e - rho_s_h + 1/sigma_pud_e)
-
-        gauss_h = gauss(vg,(1.0/sigma_pud_h, vg_dirac, gauss_w))
-        #electron and hole conductivity
-        # sigma_h = 1 / (rho_s_h + np.power(1/(np.power((sigma_pud_h),pow) + np.power(N_c * e * mu_h,pow)),1/pow))
-        # sigma_e = 1 / (rho_s_e + np.power(1/(np.power((sigma_pud_e),pow) + np.power(N_c * e * mu_e,pow)),1/pow))
-        sigma_h = 1 / (rho_s_h + np.power(1/(np.power((gauss_h),pow) + np.power(N_c * e * mu_h,pow)),1/pow))
-        sigma_e = 1 / (rho_s_e + np.power(1/(np.power((gauss_e),pow) + np.power(N_c * e * mu_e,pow)),1/pow))
-        #condition for fitting
-        cond = [vg > vg_dirac, vg <= vg_dirac]
-        #gate dependent conductivity
-        sigma = sigma_const + np.select(cond, [sigma_e, sigma_h])
-        return sigma
-
-    def plotFit(self, x1 = None, ax = None, label="", c=None, s=1):
-        # Intialize parameters
-        if self.fitted:
-            return fitParamsRvG.plotParamsP(x1=x1, ax = ax, params = tuple(self.fitparams), label=label, c=c, s=s)
-        else:
-            return None
-
-    def plotParams(self, x1, ax=None, label = "", c = None, s=1):
-        return fitParamsRvG.plotParamsP(x1=x1, ax=ax, params=(self.sigma_pud_e, self.mu_e, self.mu_h, self.rho_s_e, self.rho_s_h, self.vg_dirac, self.sigma_const, self.pow), label = label, c=c, s=s)
-
-    def plotParamsP(x1, ax = None, params = (3e-4, 1000.0, 1000.0, 100.0, 100.0, 0.0, 0.0, 2.85), label="", c=None, s=1):
-        # Initialize figure and axis.
-        if ax is None:
-            fig, ax = plt.subplots(1,1)
-        else:
-            fig = ax.get_figure()
-            #Clear existing legend:
-            legend = ax.get_legend()
-            if legend is not None:
-                legend.remove()
-
-        # Generate data based on params
-        if x1 is None:
-            x1 = np.linspace(-80, 80, 161)
-        y1 = fitParamsRvG.fitFuncP(x1, params)
-        ax.plot(x1,y1,label=label, c=c, linewidth=s)
-
-        #Setup Axis Labels and Legends
-        # handles, labels = ax.get_legend_handles_labels()
-        # fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.05,0.5), loc = "center")
-        ax.set_title("Electronic transport")
-        ax.set_xlabel("Gate Voltage (V)")
-        # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-        ax.set_ylabel("Conductivity (x$10^{-3}$ S)")
-        ax.tick_params(direction="in")
-        scale_y = 1e-3
-        ticks_y = ticker.FuncFormatter(lambda y, pos: '{0:g}'.format(y/scale_y))
-        ax.yaxis.set_major_formatter(ticks_y)
-        return ax
-
-    def plotParamsP_gauss(x1, ax = None, params = (3e-4, 1000.0, 1000.0, 100.0, 100.0, 0.0, 0.0, 2.85, 2), label="", c=None, s=1):
-        # Initialize figure and axis.
-        if ax is None:
-            fig, ax = plt.subplots(1,1)
-        else:
-            fig = ax.get_figure()
-            #Clear existing legend:
-            legend = ax.get_legend()
-            if legend is not None:
-                legend.remove()
-
-        # Generate data based on params
-        if x1 is None:
-            x1 = np.linspace(-80, 80, 161)
-        y1 = fitParamsRvG.fitFuncP_gauss(x1, params)
-        ax.plot(x1,y1,label=label, c=c, linewidth=s)
-
-        #Setup Axis Labels and Legends
-        # handles, labels = ax.get_legend_handles_labels()
-        # fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.05,0.5), loc = "center")
-        ax.set_title("Electronic transport")
-        ax.set_xlabel("Gate Voltage (V)")
-        # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-        ax.set_ylabel("Conductivity (x$10^{-3}$ S)")
-        ax.tick_params(direction="in")
-        scale_y = 1e-3
-        ticks_y = ticker.FuncFormatter(lambda y, pos: '{0:g}'.format(y/scale_y))
-        ax.yaxis.set_major_formatter(ticks_y)
-        return ax
-
-    def fitCond(data, p0=(3e-4, 1000.0, 1000.0, 100.0, 100.0, None, 0.0, 2.85)):
-
-        #If None guess for Vg_dirac, then use min conductivity/max resistance.
-        if p0[5] is None:
-            #get min cond index
-            minv = np.amin(data,0)
-            mini = np.where(data == minv[1])[0]
-            if len(mini) > 1: #Take middle element if multiple matches.
-                mini = mini[int(np.floor(len(mini)/2.0))]
-            #modify list
-            lst = list(p0)
-            lst[5] = float(data[mini,0]) #Max resistance
-            p0 = tuple(lst)
-
-        #Assuming data[:,1] is conductivity.
-        #Assuming data[:,0] is gate voltage.
-        # defaultBoundsL = [0,0,0,0,0,-100,0,2]
-        # defaultBoundsU = [5e-3,1e5,1e5,1e4,1e4,100,5e-3,5]
-        defaultBoundsL = [0,0,0,0,0,p0[5],0,2]
-        defaultBoundsU = [5e-3,1e5,1e5,1e4,1e4,p0[5]+0.1,5e-3,3]
-
-        fitdata = data[:,0:2].copy().astype(float)
-        params, covar = opt.curve_fit(fitParamsRvG.fitFunc, fitdata[:,0], fitdata[:,1], p0=p0, bounds=(defaultBoundsL, defaultBoundsU))
-
-        fitObj = fitParamsRvG(params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7])
-        fitObj.fitted = True
-        fitObj.fitparams = params
-        fitObj.fitcovar = covar
-        fitObj.initCovar(P=covar)
-        return fitObj
-
-    def fitCond_gauss(data, p0=(3e-4, 1000.0, 1000.0, 100.0, 100.0, None, 0.0, 2.85, 2)):
-
-        #If None guess for Vg_dirac, then use min conductivity/max resistance.
-        if p0[5] is None:
-            #get min cond index
-            minv = np.amin(data,0)
-            mini = np.where(data == minv[1])[0]
-            if len(mini) > 1: #Take middle element if multiple matches.
-                mini = mini[int(np.floor(len(mini)/2.0))]
-            #modify list
-            lst = list(p0)
-            lst[5] = float(data[mini,0]) #Max resistance
-            p0 = tuple(lst)
-
-        #Assuming data[:,1] is conductivity.
-        #Assuming data[:,0] is gate voltage.
-        # defaultBoundsL = [0,0,0,0,0,-100,0,2,0]
-        # defaultBoundsU = [5e-3,1e5,1e5,1e4,1e4,100,5e-3,5, 100]
-        defaultBoundsL = [0,0,0,0,0,p0[5],0,2,0]
-        defaultBoundsU = [5e-3,1e5,1e5,1e4,1e4,p0[5]+0.1,5e-3,5, 100]
-
-        fitdata = data[:,0:2].copy().astype(float)
-        params, covar = opt.curve_fit(fitParamsRvG.fitFunc, fitdata[:,0], fitdata[:,1], p0=p0, bounds=(defaultBoundsL, defaultBoundsU))
-
-        # fitObj = fitParamsRvG(params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7])
-        # fitObj.fitted = True
-        # fitObj.fitparams = params
-        # fitObj.fitcovar = covar
-        # fitObj.initCovar(P=covar)
-        return params, covar
-
-    def fitRes(data, p0=(3e-4, 3000.0, 3000.0, 100.0, 100.0, None, 0.0, 2.85)):
-        cond_data = data.copy()
-        cond_data[:,1] = np.reciprocal(data[:,1])
-        return fitParamsRvG.fitCond(data=cond_data, p0=p0)
-
-
-    def fitRes_gauss(data, p0=(3e-4, 3000.0, 3000.0, 100.0, 100.0, None, 0.0, 2.85, 2)):
-        cond_data = data.copy()
-        cond_data[:,1] = np.reciprocal(data[:,1])
-        return fitParamsRvG.fitCond(data=cond_data, p0=p0)
-
-class fitSet():
-    def __init__(self,temps, set):
-        self.temps = temps
-        self.puddle_cond = []
-        self.puddle_cond_err = []
-        self.mob_e = []
-        self.mob_e_err = []
-        self.mob_h = []
-        self.mob_h_err = []
-        self.rho_s_e = []
-        self.rho_s_e_err = []
-        self.rho_s_h = []
-        self.rho_s_h_err = []
-        self.v_dirac = []
-        self.v_dirac_err = []
-        self.const_cond = []
-        self.const_cond_err = []
-        self.pow = []
-        self.pow_err = []
-
-        for fit in set:
-            self.puddle_cond.append(fit.sigma_pud_e)
-            self.mob_e.append(fit.mu_e)
-            self.mob_h.append(fit.mu_h)
-            self.rho_s_e.append(fit.rho_s_e)
-            self.rho_s_h.append(fit.rho_s_h)
-            self.v_dirac.append(fit.vg_dirac)
-            self.const_cond.append(fit.sigma_const)
-            self.pow.append(fit.pow)
-
-            try:
-                if hasattr(fit.fitcovar, "shape"):
-                    # print(len(self.puddle_cond_err))
-                    self.puddle_cond_err.append(fit.sigma_pud_e_err)
-                    self.mob_e_err.append(fit.mu_e_err)
-                    # print(len(self.mob_e_err))
-                    self.mob_h_err.append(fit.mu_h_err)
-                    self.rho_s_e_err.append(fit.rho_s_e_err)
-                    self.rho_s_h_err.append(fit.rho_s_h_err)
-                    self.v_dirac_err.append(fit.vg_dirac_err)
-                    self.const_cond_err.append(fit.sigma_const_err)
-                    self.pow_err.append(fit.pow_err)
-            except ValueError:
-                pass
-
-        self.ylabels = {"sigma_pud_e"   :   r"Conductivity (x$10^{-3}$ S)",
-                        "mu_e"          :   r"Mobility (cm$^2$V$^{-1}$s${-1}$)",
-                        "mu_h"          :   r"Mobility (cm$^2$V$^{-1}$s${-1}$)",
-                        "rho_s_e"       :   r"$\rho_S$ ($\Omega$)",
-                        "rho_s_h"       :   r"$\rho_S$ ($\Omega$)",
-                        "vg_dirac"      :   r"Voltage (V)",
-                        "sigma_const"   :   r"Conductivity (x$10^{-3}$ S)",
-                        "pow"           :   r"Power Index"
-                        }
-
-        return
-
-
-    def plotPvT(self, param_data, param_err=None, label= "", ax=None, plot_errors=True):
-        if ax is None:
-            fig, ax = plt.subplots(1,1)
-        if not param_err or not plot_errors:
-            ax.plot(self.temps, param_data, 'o-', label=label)
-        else:
-            ax.errorbar(x=self.temps, y=param_data, yerr=param_err, fmt='o-', capsize=5, label=label)
-        ax.set_xlabel("Temperature (K)")
-        ax.tick_params(direction="in")
-        return ax
-
-    def plotMu(self, ax = None, label="", plot_errors=True):
-        ax1 = self.plotPvT(param_data=self.mob_e, param_err=self.mob_e_err, label="Electron " + label, ax=ax, plot_errors=plot_errors)
-        self.plotPvT(self.mob_h, self.mob_h_err, label="Hole " + label, ax=ax1, plot_errors=plot_errors)
-        ax1.set_ylabel(self.ylabels["mu_e"])
-        return ax1
-
-    def plotRhoS(self, ax = None, label="", plot_errors=True):
-        ax1 = self.plotPvT(self.rho_s_e, self.rho_s_e_err, label="Electron " + label, ax=ax, plot_errors=plot_errors)
-        self.plotPvT(self.rho_s_h, self.rho_s_h_err, label="Hole " + label, ax=ax1, plot_errors=plot_errors)
-        ax1.set_ylabel(self.ylabels["rho_s_e"])
-        return ax1
-
-    def plotVDirac(self, ax = None, label="", plot_errors=True):
-        if np.all(np.array(self.v_dirac_err) > 50):
-            ax1 = self.plotPvT(self.v_dirac, label="Dirac " + label, ax=ax, plot_errors=plot_errors)
-            ax1.set_ylabel(self.ylabels["vg_dirac"])
-        else:
-            ax1 = self.plotPvT(self.v_dirac, self.v_dirac_err, label="Dirac " + label, ax=ax, plot_errors=plot_errors)
-            ax1.set_ylabel(self.ylabels["vg_dirac"])
-        return ax1
-
-    def plotSigmaConst(self, ax = None, label="", plot_errors=True):
-        ax1 = self.plotPvT(self.const_cond, self.const_cond_err, label=r"$\sigma_{0}$" + label, ax=ax, plot_errors=plot_errors)
-        ax1.set_ylabel(self.ylabels["sigma_const"])
-        scale_y = 1e-3
-        ticks_y = ticker.FuncFormatter(lambda y, pos: '{0:g}'.format(y/scale_y))
-        ax1.yaxis.set_major_formatter(ticks_y)
-        return ax1
-
-    def plotSigmaPud(self, ax = None, label="", plot_errors=True):
-        ax1 = self.plotPvT(self.puddle_cond, self.puddle_cond_err, label=r"$\sigma_{pud}$" + label, ax=ax, plot_errors=plot_errors)
-        ax1.set_ylabel(self.ylabels["sigma_pud_e"])
-        scale_y = 1e-3
-        ticks_y = ticker.FuncFormatter(lambda y, pos: '{0:g}'.format(y/scale_y))
-        ax1.yaxis.set_major_formatter(ticks_y)
-        return ax1
-
-    def plotPower(self, ax= None, label="", plot_errors=True):
-        ax1 = self.plotPvT(self.pow, self.pow_err, label=r"$\alpha$" + label, ax=ax, plot_errors=plot_errors)
-        ax1.set_ylabel(self.ylabels["pow"])
-        return ax1
-
-### ----------------------------------------------------------------------------------------------------------------------------- ###
-### ----------------------------------------------------------------------------------------------------------------------------- ###
-class RvT_data():
-    def __init__(self,RVG_set):
-        self.gate_voltages = RVG_set[0].sampled_vg_data.GATE_VOLTAGES.copy()
-        self.resistancesU = np.zeros((len(RVG_set), len(self.gate_voltages))) #Data ordered by 1. temps, 2. gate voltages.
-        self.resistancesD = np.zeros((len(RVG_set), len(self.gate_voltages)))
-        self.temps = np.zeros(len(RVG_set))
-        self.fitted = False
-        self.fitParams = None
-        self.fitFunc = None
-
-        #Gather data at each gate voltage for each temperature:
-        for i in range(len(RVG_set)):
-            rvg_obj = RVG_set[i]
-            self.resistancesU[i, :] = rvg_obj.sampled_vg_data.rvg_u[:].copy()
-            self.resistancesD[i, :] = rvg_obj.sampled_vg_data.rvg_d[:].copy()
-            self.temps[i] = rvg_obj.TEMP_MEAN
-        return
-
-    #Graphing
-    def graphU(self):
-        return self.graph(self.resistancesU)
-
-    def graphD(self):
-        return self.graph(self.resistancesD)
-
-    def graph(self, resistances, gate_voltages=None, temps=None):
-        if gate_voltages is None:
-            gate_voltages = self.gate_voltages
-        if temps is None:
-            temps = self.temps
-
-        fig, (ax1) = plt.subplots(1,1)
-
-        # cmap = cm.get_cmap("inferno")
-        # cmap = cm.get_cmap("viridis")
-        # cmap = cm.get_cmap("plasma")
-        cmap = cm.get_cmap("coolwarm")
-        dims = [1j * a for a in np.shape(resistances)]
-        m1, m2 = np.mgrid[0:1:dims[1], 1:1:dims[0]]
-
-        c = cmap(m1)
-
-        for i in range(len(gate_voltages)):
-            cmat = np.ones(len(resistances[:,i])) * gate_voltages[i]
-            ax1.scatter(temps, resistances[:,i], label="{:0.3g}".format(gate_voltages[i]),s=20,c=c[i])
-
-        handles, labels = ax1.get_legend_handles_labels()
-        # fig.set_size_inches(8, 8)
-        fig.legend(handles, labels, title="Legend", bbox_to_anchor=(1.2,0.85))#, loc = "best")
-        ax1.set_title("Phonon dependent electronic transport")
-        ax1.set_xlabel("Temperature (K)")
-        # ax1.set_ylabel("Conductivity (cm$^2V^{-1}s^{-1}$)")
-        ax1.set_ylabel(r"Resitivity ($\Omega$)")
-        ax1.tick_params(direction="in")
-        return ax1
-
-
-
-    # Fitting
-    class fitParamsRvT1():
-        def __init__(self, p, vg, temps):
-            self.Da, self.a1, self.B1, *R = p
-            self.R0 = list(R)
-            self.vg = vg #Accompany the set of R0 values.
-            self.temps = temps
-            self.fitted = False
-            self.fitparams = None
-            self.fitcovar = None
-            return
-
-        def plotParams(self, ax=None, temps = None, s=1, c=None):
-            if ax is None:
-                fig, (ax1) = plt.subplots(1,1)
-            else:
-                ax1 = ax
-            if temps is None:
-                temps = np.linspace(start=10,stop=400, num=390)
-            for i in range(len(self.vg)): #for each gate voltages:
-                voltage = self.vg[i]
-                if c is None:
-                    ax1.scatter(temps, RvT_data.rho_T((temps,voltage), Da=self.Da, a1=self.a1, B1=self.B1, R0=self.R0[i]), label=str(voltage), s=s)
-                else:
-                    ax1.scatter(temps, RvT_data.rho_T((temps,voltage), Da=self.Da, a1=self.a1, B1=self.B1, R0=self.R0[i]), label=str(voltage), s=s, c=c[i])
-
-            ax1.set_title("Phonon dependent electronic transport")
-            ax1.set_xlabel("Temperature (K)")
-            ax1.set_ylabel(r"Resitivity ($\Omega$)")
-            ax1.tick_params(direction="in")
-            return ax1
