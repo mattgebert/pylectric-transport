@@ -151,7 +151,7 @@ class Meas_GatedResistance():
         return params, covar
 
     ################### PLOTTING PARAMETERS ########################
-    def __scatterVG(data, ax = None, s=1, c=None, label=None):
+    def __scatterVG(data, ax = None, s=1, c=None, label=None, style=None):
         if ax is None:
             fig, (ax1) = plt.subplots(1,1)
         else:
@@ -163,7 +163,10 @@ class Meas_GatedResistance():
         if c is None:
             c = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
 
-        ax1.scatter(data[:,0], data[:,1], label=label, s=s, c=c)
+        if style != None:
+            ax1.scatter(data[:,0], data[:,1], style, label=label, s=s, c=c)
+        else:
+            ax1.scatter(data[:,0], data[:,1], label=label, s=s, c=c)
         return ax1
 
     def plot_R_vG(self, ax = None, c = None, s=1, label=""):
@@ -174,12 +177,12 @@ class Meas_GatedResistance():
         ax1.set_ylabel("Resistance ($\Omega$)")
         return ax1
 
-    def plot_Rho_vG(self, ax = None, c = None, s=1, label=""):
+    def plot_Rho_vG(self, ax = None, c = None, s=1, label="", style=None):
         """Plots the scaled resitivity data versus gate voltage"""
         # Calculate resistivity
         Rho = np.reciprocal(self.conductivity_data[:,1])
         # Plot restivitiy
-        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c, label=label)
+        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c, label=label, style=style)
         # Generate 2D/3D Label
         ax1.set_ylabel("Resisitivity ($\Omega$)") if self.is2D else ax1.set_ylabel("Resisitivity ($\Omega$ cm)")
         return ax1
@@ -216,7 +219,7 @@ class Meas_Temp_GatedResistance():
             raise ValueError("Dimension mismatch: Temperature and gate voltage arrays didn't match dimensions of resisitivty array.")
         return
 
-    def plot_Rho_vT(self, ax=None, c=None, s=1, labels=None, singleLabel=None, offsets=None):
+    def plot_Rho_vT(self, ax=None, c=None, labels=None, singleLabel=None, offsets=None, **kwargs):
         """ Generic scatter plot for resistance vs gate voltage.
             Colours length has to match length of voltages.
         """
@@ -231,22 +234,29 @@ class Meas_Temp_GatedResistance():
             fig, (ax1) = plt.subplots(1,1)
         else:
             ax1 = ax
+
+        # kwargs
         if c is None:
             c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         for i in range(len(self.vg)):
+            #Colour:
             c_i = c[i % len(c)]
-            vg = self.vg[i]
+            kwargs["c"]=c_i
+            #Labels:
             if singleLabel is not None:
                 if i == 0:
-                    ax1.scatter(self.temps, self.resistivity[:,i] - offsets[i], s=1, c = c_i, label=singleLabel)
+                    label=singleLabel
                 else:
-                    ax1.scatter(self.temps, self.resistivity[:,i] - offsets[i], s=1, c = c_i)
+                    label=None
             else:
                 if labels is None:
-                    ax1.scatter(self.temps, self.resistivity[:,i] - offsets[i], s=1, c = c_i, label="%0.02f" % vg)
+                    vg = self.vg[i]
+                    label="%0.02f" % vg
                 else:
-                    ax1.scatter(self.temps, self.resistivity[:,i] - offsets[i], s=1, c = c_i, label=labels[i])
-        # ax1.set_title("Electronic transport")
+                    label=labels[i]
+            kwargs["label"]=label
+            # Boom.
+            ax1.scatter(self.temps, self.resistivity[:,i] - offsets[i], **kwargs)
         ax1.set_xlabel("Temperature (K)")
         ax1.set_ylabel(self.ylabel)
         return ax1
@@ -257,7 +267,7 @@ class Meas_Temp_GatedResistance():
         """
         return Meas_Temp_GatedResistance.__fit(temps=self.temps, vg=self.vg, data=self.resistivity, fit_function=fit_function, x0=params, boundsU=boundsU, boundsL=boundsL)
 
-    def global_RTVg_plot(self, function, params, ax=None, c=None, linewidth=1, labels=None, points=100, style='', singleLabel=None, offsets=None):
+    def global_RTVg_plot(self, function, params, ax=None, c=None, linewidth=1, labels=None, points=100, style='', singleLabel=None, offsets=None, T_max=None):
         """ Generic plotting function for parameter set of function.
             Similar to __fit, requires
         """
@@ -278,9 +288,12 @@ class Meas_Temp_GatedResistance():
         ax1.set_ylabel(self.ylabel)
         ax1.tick_params(direction="in")
 
-        max_t = np.max(self.temps)
+        if T_max is None:
+            max_t = np.max(self.temps)
+        else:
+            max_t = T_max
         min_t = np.min(self.temps)
-        fit_temps = np.linspace(min_t, max_t, points) #Arbitrary 200 plot points to look smooth.
+        fit_temps = np.linspace(min_t, max_t, points) #Arbitrary 100 plot points to look smooth.
 
         #Reshape inputs: First index is temp, second index is vg
         T = np.array([np.array(fit_temps) for i in range(len(self.vg))], dtype=np.longfloat) #Resize temp list for each vg.

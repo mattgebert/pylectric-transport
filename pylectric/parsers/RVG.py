@@ -65,12 +65,12 @@ class RVG_file():
         maxima = np.where(self.RAW_DATA[:,ivar_index]==np.max(self.RAW_DATA[:,ivar_index]))
         if len(maxima) == 1:
             i = maxima[0][0]
-            return (self.RAW_DATA[:i+1,:], self.RAW_DATA[:i:-1,:])
+            return (self.RAW_DATA[:i+1,:].copy(), self.RAW_DATA[:i:-1,:].copy())
         else:
             minima = np.where(self.RAW_DATA[:,ivar_index]==np.min(self.RAW_DATA[:,ivar_index]))
             if len(minima) == 1:
                 i = minima[0][0]
-                return (self.RAW_DATA[i+1:0,:], self.RAW_DATA[i:,:])
+                return (self.RAW_DATA[i+1:0,:].copy(), self.RAW_DATA[i:,:].copy())
             else:
                 raise AttributeError("The dataset does not have a single turning point.")
                 return None
