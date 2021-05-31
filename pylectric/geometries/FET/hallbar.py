@@ -19,6 +19,7 @@ class Meas_GatedResistance():
         #1. Cols = [V_gate, Resistance]
         self.raw_data = np.array(data, np.longfloat).copy()
         self.conductivity_data = self.raw_data.copy()[:,0:2]
+        #Note, Resistance = Resistivity * L / (W * D) -> Conductivity = 1/Resistance  * L / (W * D)
         self.conductivity_data[:,1] = np.reciprocal(self.conductivity_data[:,1] * W / L) if D is None else np.reciprocal(self.conductivity_data[:,1] * W * D / L)
         self.L = L
         self.W = W

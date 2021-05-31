@@ -32,8 +32,8 @@ PRELUDE = "\\01 Ga2O3 Devices"
 
 #               Devs4_04, after Ga2O3 Deposition                 #
 RAW_DATA_DIR = "\\04 Devs4_04\\PPMS Data\\03 Data by date\\2020-12-15" #Folder for raw data
-# FILE_DESCRIPTOR = "hBN-Gr_Devs4_04_run10_V08-V07" # Gallium Oxide
-FILE_DESCRIPTOR = "hBN-Gr_Devs4_04_run10_V01-V02" # Bare Graphene
+FILE_DESCRIPTOR = "hBN-Gr_Devs4_04_run10_V08-V07" # Gallium Oxide
+# FILE_DESCRIPTOR = "hBN-Gr_Devs4_04_run10_V01-V02" # Bare Graphene
 
 #               Devs4_03, after Ga2O3 Deposition                 #
 # RAW_DATA_DIR = "\\05 Devs4_03\\01 Outliers Removed\\2020-12-20" #Folder for raw data
@@ -73,7 +73,7 @@ for file in files:
 ####                        Setup graphing for Phonon Analysis                     #####
 ########################################################################################
 #Create graphic directory for mobility
-target2 = os.getcwd() + RAW_DATA_DIR + "\\" + FILE_DESCRIPTOR + "\\" + "07 Corrected Geom" + "\\"
+target2 = os.getcwd() + RAW_DATA_DIR + "\\" + FILE_DESCRIPTOR + "\\" + "08 Corrected Geom" + "\\"
 target3 = target2 + "\\" + "Dirac Point Fitting" + "\\"
 if not os.path.isdir(target2):
     os.mkdir(target2)
@@ -237,29 +237,29 @@ plt.savefig(target2 + "00 RTVg Ave Data.png", bbox_inches="tight")
 ########################################################################################################
 
 FILE_DESCRIPTOR
-# ###Take a large subset of gate voltages for good exponential behaviour
-# ## Devs4_04_run10_V01-V02  & Devs4_04_run10_V08-V07
-# # t1,t2 = (5, 23) #Devs4_4 run010, or Devs4_3 run04
-# t1,t2 = (5, 22) #Devs4_4 run010, or Devs4_3 run04
-# # t1,t2 = (5, 21) #Devs4_4 run010, or Devs4_3 run04
-# # vgs_exp = np.linspace(10,70,16) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(30,70,11) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(26,70,12) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(34,70,10) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(38,70,9) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(42,70,8) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(10,66,15) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(22,66,12) #6 voltages, 5-30 includive.
+###Take a large subset of gate voltages for good exponential behaviour
+## Devs4_04_run10_V01-V02  & Devs4_04_run10_V08-V07
+# t1,t2 = (5, 23) #Devs4_4 run010, or Devs4_3 run04
+t1,t2 = (5, 22) #Devs4_4 run010, or Devs4_3 run04
+# t1,t2 = (5, 21) #Devs4_4 run010, or Devs4_3 run04
+# vgs_exp = np.linspace(10,70,16) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(30,70,11) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(26,70,12) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(34,70,10) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(38,70,9) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(42,70,8) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(10,66,15) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(22,66,12) #6 voltages, 5-30 includive.
 # vgs_exp = np.linspace(30,66,10) #6 voltages, 5-30 includive. #30V -> 66V
-# # vgs_exp = np.linspace(26,66,11) #6 voltages, 5-30 includive. #26V -> 66V
-# # vgs_exp = np.linspace(34,66,9) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(38,66,8) #6 voltages, 5-30 includive.
-# # vgs_exp = np.linspace(42,66,7) #6 voltages, 5-30 includive.
-# # vgs_exp
-# # vgs_exp
-# fit_dirac_exp = fitted_dirac_points[t1:t2]
-# temps_exp = temps[t1:t2]
-# exp_meas_objs = meas_objs[t1:t2]
+vgs_exp = np.linspace(26,66,11) #6 voltages, 5-30 includive. #26V -> 66V
+# vgs_exp = np.linspace(34,66,9) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(38,66,8) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(42,66,7) #6 voltages, 5-30 includive.
+# vgs_exp
+# vgs_exp
+fit_dirac_exp = fitted_dirac_points[t1:t2]
+temps_exp = temps[t1:t2]
+exp_meas_objs = meas_objs[t1:t2]
 
 # # Devs4_04_Run04_V03-V04   &   Devs4_04_Run04_V01-V02
 # t1,t2 = (2, 10) #Devs4_4 run010, or Devs4_3 run04
@@ -280,20 +280,20 @@ FILE_DESCRIPTOR
 # temps_exp = temps[t1:t2]
 # exp_meas_objs = meas_objs[t1:t2]
 
-## Devs4_03_run04_V08-V07
-t1,t2 = (4,10)
-t3,t4 = (16, 22)
-# t3,t4 = (4, 22)
-# vgs_exp = np.linspace(22,66,12) #6 voltages, 5-30 includive.
-vgs_exp = np.linspace(26,66,11) #6 voltages, 5-30 includive
-# vgs_exp = np.linspace(30,66,10) #6 voltages, 5-30 includive
-# vgs_exp = np.linspace(34,66,9) #6 voltages, 5-30 includive.
-fit_dirac_exp = np.concatenate((fitted_dirac_points[t1:t2],fitted_dirac_points[t3:t4]),axis=0)
-temps_exp = np.concatenate((temps[t1:t2], temps[t3:t4]),axis=0)
-exp_meas_objs = meas_objs[t1:t2] + meas_objs[t3:t4]
-# fit_dirac_exp = fitted_dirac_points[t3:t4]
-# temps_exp = temps[t3:t4]
-# exp_meas_objs = meas_objs[t3:t4]
+# ## Devs4_03_run04_V08-V07
+# t1,t2 = (4,10)
+# t3,t4 = (16, 22)
+# # t3,t4 = (4, 22)
+# # vgs_exp = np.linspace(22,66,12) #6 voltages, 5-30 includive.
+# vgs_exp = np.linspace(26,66,11) #6 voltages, 5-30 includive
+# # vgs_exp = np.linspace(30,66,10) #6 voltages, 5-30 includive
+# # vgs_exp = np.linspace(34,66,9) #6 voltages, 5-30 includive.
+# fit_dirac_exp = np.concatenate((fitted_dirac_points[t1:t2],fitted_dirac_points[t3:t4]),axis=0)
+# temps_exp = np.concatenate((temps[t1:t2], temps[t3:t4]),axis=0)
+# exp_meas_objs = meas_objs[t1:t2] + meas_objs[t3:t4]
+# # fit_dirac_exp = fitted_dirac_points[t3:t4]
+# # temps_exp = temps[t3:t4]
+# # exp_meas_objs = meas_objs[t3:t4]
 
 ## Collect/interpolate resistances at voltages:
 # temps_exp

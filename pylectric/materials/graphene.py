@@ -190,7 +190,8 @@ class Graphene_Phonons():
     ### Raw temperature functions
     ############################################################################
 
-    def rho_LA(temp, Da = 3.0):
+    #KEEP
+    def rho_LA(temp, Da = 18.0):
         """ Models longitudinal acoustic phonon intrinsic in graphene.
             Reffered to as rho_A in https://www.nature.com/articles/nnano.2008.58
         """
@@ -204,6 +205,7 @@ class Graphene_Phonons():
         # Value
         return (h / np.power(e,2)) * (np.power(np.pi,2) * np.power(Da * e, 2) * kB * temp) / (2 * np.power(h,2) * rho_s * np.power(vs * vf, 2))
 
+    #KEEP
     def rho_ROP_SiO2(temp, vg, params = (1,2), energies=None, couplings=None): #Params: (A1, B1)
         """ Models contribution of remote surface optical phonons,
             caused by SiO2 in proximity to graphene.
@@ -217,23 +219,25 @@ class Graphene_Phonons():
 
         a1,B1 = params
 
-        # SiO2 phonon modes and couplings.
-        if energies is None:
+        expFactor = 0
+        if energies is not None and couplings is not None:
+            if len(energies) != len(couplings):
+                raise IndexError("The size of energies and couplings do not match.")
+            else:
+                for i in range(len(energies)):
+                    expFactor += couplings[i] * np.reciprocal(np.exp(e * energies[i] / kB * np.reciprocal(temp)) - 1)
+        else:
+            # SiO2 phonon modes and couplings.
             e0,e1 = (59e-3, 155e-3)
-        else:
-            e0,e1 = energies
-        if couplings is None:
-            # g1,g2 = (1, 6.5)
-            g1,g2 = (1.75e-3, 9.396e-3)
-        else:
-            g1,g2 = couplings
-
-        expFactor = (g1 * np.reciprocal(np.exp(e * e0 / kB * np.reciprocal(temp)) - 1) + g2 * (np.reciprocal(np.exp(e * e1 / kB * np.reciprocal(temp)) - 1)))
+            g0,g1 = (1.75e-3, 9.396e-3)
+            expFactor = (g0 * np.reciprocal(np.exp(e * e0 / kB * np.reciprocal(temp)) - 1) +
+                         g1 * np.reciprocal(np.exp(e * e1 / kB * np.reciprocal(temp)) - 1))
         c1 = B1 * h / np.power(e,2)
         c2 = np.power(np.abs(vg), -a1)
         coefFactor = c1 * c2
         return expFactor * coefFactor
 
+    #KEEP
     def rho_ROP_SiO2_Ga2O3(temp, vg, params = (1,2), energies=None, couplings=None): #Params: (A1, B1)
         """ Models contribution of remote surface optical phonons,
             caused between SiO2 and Ga2O3 in proximity to graphene.
@@ -246,27 +250,27 @@ class Graphene_Phonons():
 
         a1,B1 = params
 
-        #Ga2O3 phonon modes and couplings
-        if energies is None:
-            # e0,e1,e2 = (94e-3, 146e-3, 58e-3) #05 and before
+        expFactor = 0
+        if energies is not None and couplings is not None:
+            if len(energies) != len(couplings):
+                raise IndexError("The size of energies and couplings do not match.")
+            else:
+                for i in range(len(energies)):
+                    expFactor += couplings[i] * np.reciprocal(np.exp(e * energies[i] / kB * np.reciprocal(temp)) - 1)
+        else:
+            # SiO2 phonon modes and couplings.
             e0,e1,e2 = (56.45e-3, 146.94e-3, 95.15e-3) #06 onward
-        else:
-            e0,e1,e2 = energies
-        if couplings is None:
-            # g1,g2,g3 = (1, 1.533, 2.8317)
-            # g1,g2,g3 = (1.89e-3,2.892e-3,5.34e-3) #05 and before
-            g1,g2,g3 = (9.75e-4, 2.02e-3, 8.12e-3) #06 onward
-        else:
-            g1,g2,g3 = couplings
+            g0,g1,g2 = (9.75e-4, 2.02e-3, 8.12e-3) #06 onward
+            expFactor = (g0 * np.reciprocal(np.exp(e * e0 / kB * np.reciprocal(temp)) - 1) +
+                         g1 * np.reciprocal(np.exp(e * e1 / kB * np.reciprocal(temp)) - 1) +
+                         g2 * np.reciprocal(np.exp(e * e2 / kB * np.reciprocal(temp)) - 1))
 
-        expFactor = ( g1 * np.reciprocal(np.exp(e * e0 / kB * np.reciprocal(temp)) - 1)
-                    + g2 * np.reciprocal(np.exp(e * e1 / kB * np.reciprocal(temp)) - 1)
-                    + g3 * np.reciprocal(np.exp(e * e2 / kB * np.reciprocal(temp)) - 1))
         c1 = B1 * h / np.power(e,2)
         c2 = np.power(np.abs(vg), -a1)
         coefFactor = c1 * c2
         return expFactor * coefFactor
 
+    #KEEP
     def rho_ROP_Generic(temp, vg, params = (1,2,120e-3)): #Params: (A1, B1, E0)
         """ Models contribution of remote surface optical phonons,
             caused an abitrary single optical mode in proximity to graphene.
@@ -289,35 +293,8 @@ class Graphene_Phonons():
     ### Combination temperature functions
     ############################################################################
 
-    def rho_Graphene_on_SiO2(X, *p):
-        """ Fitting function for Graphene on SiO2.
-            X should be a tuple of 1D arrays of temperatures and gate voltages.
-            p should be a tuple of parameters corresponding to:
-                Da, the deformation potential.
-                a1, the power index coupling of remote phonons to gate voltage.
-                B1, the coupling magnitude of remote phonons
-                *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
-                Note R0 must be the same as the number of gate voltages.
-        """
-        #Expand 1D temp and vg lists from tuple.
-        temp, vg = X
-        #Expand parameters to count amount of gate voltages.
-        Da, a1, B1, *R0 = p
-        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
-        vg_steps = len(R0)
-        temp_steps = len(temp)/vg_steps
-
-        #Setup new matrix for returning generated values.
-        retVal = np.zeros(temp.shape)
-        for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
-            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
-        return retVal
-
-    def rho_Graphene_on_Dielectric(X, *p):
+    #rho0
+    def rho_Gr_on_Dielectric(X, *p):
         """ Fitting function for Graphene on/inbetween arbitrary dielectrics.
             X should be a tuple of 1D arrays of temperatures and gate voltages.
             p should be a tuple of parameters corresponding to:
@@ -350,6 +327,7 @@ class Graphene_Phonons():
         """ Fitting function for Graphene on/inbetween arbitrary dielectrics.
             X should be a tuple of 1D arrays of temperatures and gate voltages.
             p should be a tuple of parameters corresponding to:
+                a1, the power index coupling of remote phonons to carrier density.
                 B1, the coupling magnitude of remote phonons
                 E0, the activation energy of the remote phonons
                 *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
@@ -358,11 +336,7 @@ class Graphene_Phonons():
         #Expand 1D temp and vg lists from tuple.
         temp, vg = X
         #Expand parameters to count amount of gate voltages.
-        B1, E0, *R0 = p
-        # Defined parameters:
-        # Da = 18.0
-        Da = 27.8
-        a1 = 1.0
+        a1, B1, E0, *R0 = p
         #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
@@ -374,11 +348,70 @@ class Graphene_Phonons():
             i1=int(0+i*temp_steps)
             i2=int((i+1)*temp_steps)
             #Calculate each set of indexes
-            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
         return retVal
 
-    def rho_Graphene_between_SiO2_Ga2O3(X, *p):
+    #rho2
+    def rho_Gr_on_SiO2(X, *p):
+        """ Fitting function for Graphene on SiO2.
+            X should be a tuple of 1D arrays of temperatures and gate voltages.
+            p should be a tuple of parameters corresponding to:
+                Da, the deformation potential.
+                a1, the power index coupling of remote phonons to gate voltage.
+                B1, the coupling magnitude of remote phonons
+                *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
+                Note R0 must be the same as the number of gate voltages.
+        """
+        #Expand 1D temp and vg lists from tuple.
+        temp, vg = X
+        #Expand parameters to count amount of gate voltages.
+        Da, a1, B1, *R0 = p
+        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
+        vg_steps = len(R0)
+        temp_steps = len(temp)/vg_steps
+
+        #Setup new matrix for returning generated values.
+        retVal = np.zeros(temp.shape)
+        for i in range(0,vg_steps):
+            #Define indexes of 2D data along 1D dimension
+            i1=int(0+i*temp_steps)
+            i2=int((i+1)*temp_steps)
+            #Calculate each set of indexes
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
+        return retVal
+
+    #rho3
+    def rho_ROP_Gr_on_SiO2(X, *p):
+        """ Fitting function for Graphene on SiO2.
+            X should be a tuple of 1D arrays of temperatures and gate voltages.
+            p should be a tuple of parameters corresponding to:
+                a1, the power index coupling of remote phonons to gate voltage.
+                B1, the coupling magnitude of remote phonons
+                *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
+                Note R0 must be the same as the number of gate voltages.
+        """
+        #Expand 1D temp and vg lists from tuple.
+        temp, vg = X
+        #Expand parameters to count amount of gate voltages.
+        a1, B1, *R0 = p
+        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
+        vg_steps = len(R0)
+        temp_steps = len(temp)/vg_steps
+
+        #Setup new matrix for returning generated values.
+        retVal = np.zeros(temp.shape)
+        for i in range(0,vg_steps):
+            #Define indexes of 2D data along 1D dimension
+            i1=int(0+i*temp_steps)
+            i2=int((i+1)*temp_steps)
+            #Calculate each set of indexes
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
+        return retVal
+
+    #rho4
+    def rho_Gr_between_SiO2_Ga2O3(X, *p):
         """ Fitting function for Graphene inbetween arbitrary dielectrics.
+            Resistance for linear acoustic and remote optical phonons.
             X should be a tuple of 1D arrays of temperatures and gate voltages.
             p should be a tuple of parameters corresponding to:
                 Da, the deformation potential.
@@ -405,41 +438,13 @@ class Graphene_Phonons():
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
-    def rho_ROP_Gr_on_SiO2(X, *p):
-        """ Fitting function for Graphene inbetween arbitrary dielectrics.
-            X should be a tuple of 1D arrays of temperatures and gate voltages.
-            p should be a tuple of parameters corresponding to:
-                B1, the coupling magnitude of remote phonons
-                *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
-                Note R0 must be the same as the number of gate voltages.
-        """
-        #Expand 1D temp and vg lists from tuple.
-        temp, vg = X
-        #Expand parameters to count amount of gate voltages.
-        B1, *R0 = p
-        #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
-        vg_steps = len(R0)
-        temp_steps = len(temp)/vg_steps
-
-        #Contants from literature
-        # Da = 18.0
-        Da = 27.8
-        a1 = 1.0 #assumed
-
-        #Setup new matrix for returning generated values.
-        retVal = np.zeros(temp.shape)
-        for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
-            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
-        return retVal
-
+    #rho5
     def rho_ROP_Gr_between_SiO2_Ga2O3(X, *p):
-        """ Fitting function for Graphene inbetween arbitrary dielectrics.
+        """ Fitting function for remote optical phonons in graphene, inbetween arbitrary dielectrics.
+            Note: Reistance from linear acoustic phonon contributions should be removed prior.
             X should be a tuple of 1D arrays of temperatures and gate voltages.
             p should be a tuple of parameters corresponding to:
+                a1, the power of the carrier density dependence
                 B1, the coupling magnitude of remote phonons
                 *R0, a list of initial resistances (ie, at T=0 K) for each gate voltage.
                 Note R0 must be the same as the number of gate voltages.
@@ -447,15 +452,12 @@ class Graphene_Phonons():
         #Expand 1D temp and vg lists from tuple.
         temp, vg = X
         #Expand parameters to count amount of gate voltages.
-        B1, *R0 = p
+        a1, B1, *R0 = p
+        # B1, *R0 = p
+        # a1 = 18.0
         #Determine steps for gate voltages and temperatures in 1D array | one gate voltage per resistance parameter.
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
-
-        #Contants from literature
-        # Da = 18
-        Da = 27.8
-        a1 = 1.0 #assumed
 
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
@@ -464,10 +466,11 @@ class Graphene_Phonons():
             i1=int(0+i*temp_steps)
             i2=int((i+1)*temp_steps)
             #Calculate each set of indexes
-            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
+            retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
-    def rho_Graphene_LA(X, *p):
+    #rho6
+    def rho_Gr_LA(X, *p):
         """ Fitting function for low temperature Graphene longitudinal acoustic phonons.
             X should be a tuple of 1D arrays of temperatures and gate voltages.
             p should be a tuple of parameters corresponding to:
@@ -493,8 +496,226 @@ class Graphene_Phonons():
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da)
         return retVal
 
+    ############################################################################
+    ### Fitting temperature functions
+    ############################################################################
 
-    def fit_Graphene_LA(MTGR_Obj):
+    #fit0
+    def fit_Gr_on_Dielectric(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        Da, a1, B1, E0 = (18, 1, 5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.1,0.1,0.1, 1e-3] + list(Rlower)
+        defaultBoundsU = [1e6, np.inf, 1e5, np.inf] + list(Rupper)
+
+        x0 = [Da, a1, B1, E0]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Gr_on_Dielectric, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    #fit1
+    def fit_ROP_Gr_on_Dielectric(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        a1, B1, E0 = (1, 5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.001, 0.1, 1e-3] + list(Rlower)
+        defaultBoundsU = [4, 1e5, np.inf] + list(Rupper)
+        x0 = [a1, B1, E0]
+
+        # B1, E0 = (5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        # defaultBoundsL = [0.1, 1e-3] + list(Rlower)
+        # defaultBoundsU = [1e5, np.inf] + list(Rupper)
+        # x0 = [B1, E0]
+
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_on_Dielectric, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    #fit2
+    def fit_Gr_on_SiO2(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of graphene phonon modes given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:] #Each Vg has an offset resistance R0:
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        Da, a1, B1 = (18, 1, 5) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.01,0.01,0.01] + list(Rlower)
+        defaultBoundsU = [1e6, np.inf, 1e5] + list(Rupper)
+
+        x0 = [Da, a1, B1]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Gr_on_SiO2, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+        #fit3
+    def fit_ROP_Gr_on_Sio2(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        a1, B1, = (1, 18.0,) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.001, 0.01] + list(Rlower)
+        defaultBoundsU = [4, 1e5] + list(Rupper)
+
+        x0 = [a1, B1]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_on_SiO2, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    #fit4
+    def fit_Gr_between_Sio2_Ga2O3(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+
+        #Bounds
+        Da, a1, B1 = (18, 1, 5) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.1,0.1,0.1] + list(Rlower)
+        defaultBoundsU = [1e6, np.inf, 1e5] + list(Rupper)
+
+        x0 = [Da, a1, B1]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Gr_between_SiO2_Ga2O3, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    #fit5
+    def fit_ROP_Gr_between_Sio2_Ga2O3(MTGR_Obj):
+        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
+            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
+        """
+        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
+            return
+
+        vg = MTGR_Obj.vg
+        #Get initial values for R0 for each gate voltage.
+        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
+        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
+
+        #Independent Fit Variables:
+        Rlower = [] #Bounds
+        Rupper = [] #Bounds
+        for i in range(len(vg)):
+            Rlower.append(0)
+            Rupper.append(20000)
+        R = initialR0s.tolist()
+        Rupper = tuple(Rupper)
+        Rlower = tuple(Rlower)
+        #Bounds
+        a1, B1, = (1, 5,) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
+        defaultBoundsL = [0.001,0.01] + list(Rlower)
+        defaultBoundsU = [4, 1e5] + list(Rupper)
+
+        x0 = [a1, B1]
+        x0 += list(R)
+        x0 = tuple(x0)
+
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_between_SiO2_Ga2O3, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+
+    #fit6
+    def fit_Gr_LA(MTGR_Obj):
         """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
             Allows the calculation of graphene's longitudinal acoustic phonon mode
             given some RVT data fitting. Data should only include linear portion
@@ -528,206 +749,56 @@ class Graphene_Phonons():
         x0 += list(R)
         x0 = tuple(x0)
 
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_LA, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Gr_LA, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
 
-    def fit_Graphene_on_SiO2(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of graphene phonon modes given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
+    ############################################################################
+    ### Literature reference fits
+    ############################################################################
+    # Constants
+    # e = 1.60217662e-19 #C
+    # h = 6.62607004e-34
 
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:] #Each Vg has an offset resistance R0:
+    #### Chen et al. 2008 ######################################################
+    def Chen_Gr_LA(X):
+        T,Vg = X
+        Da = 18.0
+        return Graphene_Phonons.rho_Gr_LA(T, Da=18.0)
 
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
+    def Chen_Gr_ROP_SiO2(X):
+        T,Vg = X
+        # Parameters
+        a1 = 1.04
+        b1 = 0.607
+        en = [0.059,0.155]
+        gn = [1,6.5]
+        params = (a1,b1)
+        return Graphene_Phonons.rho_ROP_SiO2(T,Vg,params, energies=en, couplings=gn)
 
-        #Bounds
-        Da, a1, B1 = (18, 1, 5) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.01,0.01,0.01] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 1e5] + list(Rupper)
+    def Chen_Gr_ROP_Generic(X):
+        T,Vg = X
+        # Parameters
+        a1 = 1.02
+        b1 = 3.26
+        en = 0.104
+        params = (a1,b1,en)
+        return Graphene_Phonons.rho_ROP_Generic(T,Vg,params)
 
-        x0 = [Da, a1, B1]
-        x0 += list(R)
-        x0 = tuple(x0)
+    def Chen_Gr_SiO2(X):
+        T,Vg = X
+        return Graphene_Phonons.Chen_Gr_LA(T) + Graphene_Phonons.Chen_Gr_ROP_SiO2(T,Vg)
 
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_on_SiO2, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+    def Chen_Gr_Generic(X):
+        T,Vg = X
+        return Graphene_Phonons.Chen_Gr_LA(T) + Graphene_Phonons.Chen_Gr_ROP_Generic(T,Vg,params)
 
-    def fit_Graphene_between_Sio2_Ga2O3(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
-
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
-
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-
-        #Bounds
-        Da, a1, B1 = (18, 1, 5) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.1,0.1,0.1] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 1e5] + list(Rupper)
-
-        x0 = [Da, a1, B1]
-        x0 += list(R)
-        x0 = tuple(x0)
-
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_between_SiO2_Ga2O3, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
-
-    def fit_ROP_Gr_on_Sio2(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
-
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
-
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-        #Bounds
-        B1, = (5,) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.01] + list(Rlower)
-        defaultBoundsU = [1e5] + list(Rupper)
-
-        x0 = [B1]
-        x0 += list(R)
-        x0 = tuple(x0)
-
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_on_SiO2, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
-
-    def fit_ROP_Gr_between_Sio2_Ga2O3(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
-
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
-
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-        #Bounds
-        B1, = (5,) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.01] + list(Rlower)
-        defaultBoundsU = [1e5] + list(Rupper)
-
-        x0 = [B1]
-        x0 += list(R)
-        x0 = tuple(x0)
-
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_between_SiO2_Ga2O3, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
-
-    def fit_Graphene_on_Dielectric(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
-
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
-
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-
-        #Bounds
-        Da, a1, B1, E0 = (18, 1, 5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.1,0.1,0.1, 1e-3] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 1e5, np.inf] + list(Rupper)
-
-        x0 = [Da, a1, B1, E0]
-        x0 += list(R)
-        x0 = tuple(x0)
-
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_Graphene_on_Dielectric, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
-
-    def fit_ROP_Gr_on_Dielectric(MTGR_Obj):
-        """ Takes a Meas_Temp_GatedResistance object from pylectric.geometries.fet.hallbar
-            Allows the calculation of phonon modes affecting graphene given some RVT data fitting.
-        """
-        if not type(MTGR_Obj) is Meas_Temp_GatedResistance:
-            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_Temp_GatedResistance. Is intead: " + str(MTGR_Obj.__class__())))
-            return
-
-        vg = MTGR_Obj.vg
-        #Get initial values for R0 for each gate voltage.
-        min_temp_i = np.where(MTGR_Obj.temps == np.min(MTGR_Obj.temps))[0][0] #Find min index for temperature
-        initialR0s = MTGR_Obj.resistivity[min_temp_i,:]
-
-        #Independent Fit Variables:
-        Rlower = [] #Bounds
-        Rupper = [] #Bounds
-        for i in range(len(vg)):
-            Rlower.append(0)
-            Rupper.append(20000)
-        R = initialR0s.tolist()
-        Rupper = tuple(Rupper)
-        Rlower = tuple(Rlower)
-
-        #Bounds
-        B1, E0 = (5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.1, 1e-3] + list(Rlower)
-        defaultBoundsU = [1e5, np.inf] + list(Rupper)
-
-        x0 = [B1, E0]
-        x0 += list(R)
-        x0 = tuple(x0)
-
-        return MTGR_Obj.global_RTVg_fit(Graphene_Phonons.rho_ROP_Gr_on_Dielectric, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
+    #### Zou et al. 2012 ######################################################
+    # Zou doesn't provide enough information for C2, assuming C1 dominates.
+    # def Zou_Gr_ROP_SiO2(X):
+    #     T,Vg = X
+    #     C1, C2 = (5e2, 7e2)
+    #     N = (2 * (1e12)) #Density at 27 V
+    #
+    #     a1 = 1.0
+    #     b1 = 1.0
+    #
+    #     return return Graphene_Phonons.rho_ROP_SiO2(T,Vg,params)
