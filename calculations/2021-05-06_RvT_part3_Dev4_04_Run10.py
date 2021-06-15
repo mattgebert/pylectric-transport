@@ -144,7 +144,7 @@ rvt_obj1.global_RTVg_plot(function=graphene.Graphene_Phonons.rho_ROP_Gr_on_SiO2,
 
 #Plot reference data
 reference_offsets = [i*sep for i in range(len(obj1_offsets_exp_sio2))]
-rvt_obj2.global_RTVg_plot(function=graphene.Graphene_Phonons.Chen_Gr_ROP_SiO2, params=[], ax=exp_ax, c=colourCycle2 + colourCycle2, points=30, linewidth=0.3, style=":", singleLabel="Chen Data", offsets=reference_offsets, T_max=250)
+# rvt_obj2.global_RTVg_plot(function=graphene.Graphene_Phonons.Chen_Gr_ROP_SiO2, params=[], ax=exp_ax, c=colourCycle2 + colourCycle2, points=30, linewidth=0.3, style=":", singleLabel="Chen Data", offsets=reference_offsets, T_max=250)
 
 # LEGEND
 exp_ax.set_ylabel(r"$\Delta\rho_{xx}$ - $\rho_{xx}^{T=0}$ ($\Omega$)")

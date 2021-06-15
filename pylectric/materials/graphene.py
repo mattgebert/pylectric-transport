@@ -123,7 +123,6 @@ class Graphene_Gated():
         """
         if not type(MGR_Obj) is Meas_GatedResistance:
             raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_GatedResistance. Is intead: " + str(MGR_Obj.__class__())))
-            return
 
         ###Initial Values
         #Get initial values for minimum conductivity and gate voltage.
@@ -153,6 +152,17 @@ class Graphene_Gated():
         c,b,a = quad.coef.tolist()
         x_tp = - b / (2*a) #turning point, in otherwords dirac point voltage.
         return x_tp, quad, subset[:,0]
+
+    def carrier_density(gate_voltage, gate_capacitance):
+        """ Calculates the gated carrier density in graphene.
+            Assumes units are:
+                Voltage:        Volts
+                Capacitance:    Farads / m^2
+        """
+        e = 1.602e-19 #Coloumbs
+        return 1/e * gate_capacitance * gate_voltage
+
+
 
     #
     # def n_imp(mobility, k_eff = 4):
@@ -526,8 +536,8 @@ class Graphene_Phonons():
 
         #Bounds
         Da, a1, B1, E0 = (18, 1, 5, 120e-3) #Guesses for deformation potential, gate voltage power index and gate voltage coupling.
-        defaultBoundsL = [0.1,0.1,0.1, 1e-3] + list(Rlower)
-        defaultBoundsU = [1e6, np.inf, 1e5, np.inf] + list(Rupper)
+        defaultBoundsL = [1e-2,1e-2,1e-2, 1e-4] + list(Rlower)
+        defaultBoundsU = [1e6, 5, 1e5, 1e1] + list(Rupper)
 
         x0 = [Da, a1, B1, E0]
         x0 += list(R)

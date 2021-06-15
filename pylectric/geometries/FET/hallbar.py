@@ -1,6 +1,7 @@
 #Hall bar geometry device. Measurements have r_xx and/or r_xy
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 from scipy.signal import savgol_filter
 from pylectric.analysis import mobility
 from scipy import optimize as opt
@@ -27,7 +28,7 @@ class Meas_GatedResistance():
         self.Cg = Cg
         self.is2D = (D is None)
 
-    def mobility_dtm_2D(self, graph = True, ax=None):
+    def mobility_dtm_2D(self, graph = True, ax=None, graph_kwargs = None, vg_offset = 0):
         """ Calculates the direct transconductance method mobility.
             Requires the gate capacitance (Farads).
             Returns Mobility and a graph if parameter is True.
@@ -44,7 +45,7 @@ class Meas_GatedResistance():
             else: #create new graph
                 fig, (ax) = plt.subplots(1,1)
             #Plot
-            ax.scatter(mu_dtm_2D[:,0], mu_dtm_2D[:,1], s=0.5)
+            ax.scatter(mu_dtm_2D[:,0] - vg_offset, mu_dtm_2D[:,1], **graph_kwargs)
             ax.set_xlabel("Gate voltage (V)")
             ax.set_ylabel("Mobility (cm$^2$V$^{-1}$s${-1}$)")
             return (mu_dtm_2D, fig)
@@ -152,7 +153,7 @@ class Meas_GatedResistance():
         return params, covar
 
     ################### PLOTTING PARAMETERS ########################
-    def __scatterVG(data, ax = None, s=1, c=None, label=None, style=None):
+    def __scatterVG(data, ax = None, s=1, c=None, label=None, style=None, vg_offset = 0, scatter=True):
         if ax is None:
             fig, (ax1) = plt.subplots(1,1)
         else:
@@ -165,43 +166,49 @@ class Meas_GatedResistance():
             c = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
 
         if style != None:
-            ax1.scatter(data[:,0], data[:,1], style, label=label, s=s, c=c)
+            if scatter:
+                ax1.scatter(data[:,0] - vg_offset, data[:,1], style, label=label, s=s, c=c)
+            else:
+                ax1.plot(data[:,0] - vg_offset, data[:,1], style, label=label, linewidth=s, c=c)
         else:
-            ax1.scatter(data[:,0], data[:,1], label=label, s=s, c=c)
+            if scatter:
+                ax1.scatter(data[:,0] - vg_offset, data[:,1], label=label, s=s, c=c)
+            else:
+                ax1.plot(data[:,0] - vg_offset, data[:,1], label=label, linewidth=s, c=c)
         return ax1
 
-    def plot_R_vG(self, ax = None, c = None, s=1, label=""):
+    def plot_R_vG(self, ax = None, c = None, s=1, label="", vg_offset = 0, scatter=True):
         """Plots the raw resistance data versus gate voltage"""
         # Plot Resistance
-        ax1 = Meas_GatedResistance.__scatterVG(self.raw_data[:,0:2], ax=ax, s=s, c=c, label=label)
+        ax1 = Meas_GatedResistance.__scatterVG(self.raw_data[:,0:2], ax=ax, s=s, c=c, label=label, vg_offset=vg_offset, scatter=scatter)
         # Generate Label
         ax1.set_ylabel("Resistance ($\Omega$)")
         return ax1
 
-    def plot_Rho_vG(self, ax = None, c = None, s=1, label="", style=None):
+    def plot_Rho_vG(self, ax = None, c = None, s=1, label="", style=None, vg_offset = 0, scatter=True):
         """Plots the scaled resitivity data versus gate voltage"""
         # Calculate resistivity
         Rho = np.reciprocal(self.conductivity_data[:,1])
         # Plot restivitiy
-        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c, label=label, style=style)
+        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.conductivity_data[:,0], Rho], ax=ax, s=s, c=c, label=label, style=style, vg_offset=vg_offset, scatter=scatter)
         # Generate 2D/3D Label
         ax1.set_ylabel("Resisitivity ($\Omega$)") if self.is2D else ax1.set_ylabel("Resisitivity ($\Omega$ cm)")
         return ax1
 
-    def plot_C_vG(self, ax = None, c = None, s=1, label=""):
+    def plot_C_vG(self, ax = None, c = None, s=1, label="", vg_offset = 0, scatter=True):
         """Plots the raw conductance data versus gate voltage"""
         # Calculate conductance
         conductance = np.reciprocal(self.raw_data[:,1])
         # Plot conductance
-        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.raw_data[:,0], conductance], ax=ax, s=s, c=c, label=label)
+        ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.raw_data[:,0], conductance], ax=ax, s=s, c=c, label=label, vg_offset=vg_offset, scatter=scatter)
         # Generate Label
-        ax1.set_ylabel("Conductivity (x$10^{-3}$ S cm$^{1}$)")
+        ax1.set_ylabel("Conductivity (S)")
         return
 
-    def plot_Sigma_vG(self, ax = None, c = None, s=1, label=""):
+    def plot_Sigma_vG(self, ax = None, c = None, s=1, label="", vg_offset = 0, scatter=True):
         """Plots the scaled conductivity data versus gate voltage"""
-        ax1 = Meas_GatedResistance.__scatterVG(self.conductivity_data[:,0:2], ax=ax, s=s, c=c, label=label)
-        ax1.set_ylabel("Conductivity ($\Omega$)") if self.is2D else ax1.set_ylabel("Conductivity (x$10^{-3}$ S cm$^{1}$)")
+        ax1 = Meas_GatedResistance.__scatterVG(self.conductivity_data[:,0:2], ax=ax, s=s, c=c, label=label, vg_offset=vg_offset, scatter=scatter)
+        ax1.set_ylabel("Conductivity (S)") if self.is2D else ax1.set_ylabel("Conductivity (S cm$^{1}$)")
         return
 
 class Meas_Temp_GatedResistance():
@@ -339,8 +346,42 @@ class Meas_Temp_GatedResistance():
         VG_1D = np.reshape(VG, (-1))
         data_1D = np.reshape(data.T, (-1))
 
+        #Define warning strings.
+        tmsg = "Warning: Some temperatures were 'NaN' value; %0.0d datalines have been removed (of total %0.0d)."
+        vmsg = "Warning: Some voltages were 'NaN' value; %0.0d datalines have been removed (of total %0.0d)."
+        rmsg = "Warning: Some resistances were 'NaN' value; %0.0d datalines have been removed (of total %0.0d)."
+        xmsg = "Warning: Some initial params were 'NaN' value; %0.0d param values have been set to initialize at 0 (of total %0.0d params)."
 
-        fitdata = data.copy().astype(float)
+        #Find any NaN data in the reshaped input.
+        nans = np.where(np.isnan(T_1D))[0]
+        # Remove NaN data
+        if len(nans) > 0:
+            T_1D = np.delete(T_1D, nans)
+            VG_1D = np.delete(VG_1D, nans)
+            data_1D = np.delete(data_1D, nans)
+            warnings.warn(tmsg % (len(nans), len(T_1D)))
+        #Repeat
+        nans = np.where(np.isnan(VG_1D))[0]
+        if len(nans) > 0:
+            T_1D = np.delete(T_1D, nans)
+            VG_1D = np.delete(VG_1D, nans)
+            data_1D = np.delete(data_1D, nans)
+            warnings.warn(vmsg % (len(nans), len(VG_1D)))
+        #Repeat
+        nans = np.where(np.isnan(data_1D))[0]
+        if len(nans) > 0:
+            T_1D = np.delete(T_1D, nans)
+            VG_1D = np.delete(VG_1D, nans)
+            data_1D = np.delete(data_1D, nans)
+            warnings.warn(rmsg % (len(nans), len(data_1D)))
+
+        # Check if nans in x0 as a reuslt too:
+        nans = np.where(np.isnan(x0))[0]
+        if len(nans) > 0:
+            warnings.warn(xmsg % (len(nans), len(x0)))
+        x0 = np.nan_to_num(x0)
+
+        #Now fit data!
         params, covar = opt.curve_fit(fit_function, xdata=(T_1D, VG_1D), ydata=np.array(data_1D,dtype=np.longfloat), p0=x0 ,bounds=(boundsL, boundsU))
 
         return params, covar
