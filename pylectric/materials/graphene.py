@@ -325,12 +325,24 @@ class Graphene_Phonons():
 
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
         return retVal
 
     def rho_ROP_Gr_on_Dielectric(X, *p):
@@ -351,14 +363,27 @@ class Graphene_Phonons():
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
 
+
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
         return retVal
 
     #rho2
@@ -380,14 +405,28 @@ class Graphene_Phonons():
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
 
+
+
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
     #rho3
@@ -410,12 +449,24 @@ class Graphene_Phonons():
 
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
     #rho4
@@ -438,14 +489,27 @@ class Graphene_Phonons():
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
 
+
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
     #rho5
@@ -471,12 +535,24 @@ class Graphene_Phonons():
 
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
         return retVal
 
     #rho6
@@ -496,14 +572,27 @@ class Graphene_Phonons():
         vg_steps = len(R0)
         temp_steps = len(temp)/vg_steps
 
+
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
+        # Corrected function checks for unique values in vg (the steps) and identifies positions.
+        vg_elements = np.unique(vg)
         for i in range(0,vg_steps):
-            #Define indexes of 2D data along 1D dimension
-            i1=int(0+i*temp_steps)
-            i2=int((i+1)*temp_steps)
-            #Calculate each set of indexes
+            indexes = np.where(vg == vg_elements[i])[0]
+            #Define the indexes of 2D data along 1D dimension.
+            i1 = indexes[0]
+            i2 = indexes[-1]
+            #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da)
+
+        # #Setup new matrix for returning generated values.
+        # retVal = np.zeros(temp.shape)
+        # for i in range(0,vg_steps):
+        #     #Define indexes of 2D data along 1D dimension
+        #     i1=int(0+i*temp_steps)
+        #     i2=int((i+1)*temp_steps)
+        #     #Calculate each set of indexes
+        #     retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da)
         return retVal
 
     ############################################################################

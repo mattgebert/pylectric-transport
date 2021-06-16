@@ -227,7 +227,7 @@ class Meas_Temp_GatedResistance():
             raise ValueError("Dimension mismatch: Temperature and gate voltage arrays didn't match dimensions of resisitivty array.")
         return
 
-    def plot_Rho_vT(self, ax=None, c=None, labels=None, singleLabel=None, offsets=None, **kwargs):
+    def plot_Rho_vT(self, ax=None, c=None, labels=None, singleLabel=None, offsets=None, hollow=False, **kwargs):
         """ Generic scatter plot for resistance vs gate voltage.
             Colours length has to match length of voltages.
         """
@@ -242,14 +242,18 @@ class Meas_Temp_GatedResistance():
             fig, (ax1) = plt.subplots(1,1)
         else:
             ax1 = ax
-
         # kwargs
         if c is None:
             c = plt.rcParams['axes.prop_cycle'].by_key()['color']
         for i in range(len(self.vg)):
             #Colour:
             c_i = c[i % len(c)]
+            kwargs["edgecolors"]=c_i
             kwargs["c"]=c_i
+            if hollow and "c" in kwargs:
+                kwargs.pop("c")
+            elif not hollow and "edgecolors" in kwargs:
+                kwargs.pop("edgecolors")
             #Labels:
             if singleLabel is not None:
                 if i == 0:
