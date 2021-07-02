@@ -203,13 +203,13 @@ class Meas_GatedResistance():
         ax1 = Meas_GatedResistance.__scatterVG(np.c_[self.raw_data[:,0], conductance], ax=ax, s=s, c=c, label=label, vg_offset=vg_offset, scatter=scatter)
         # Generate Label
         ax1.set_ylabel("Conductivity (S)")
-        return
+        return ax1
 
     def plot_Sigma_vG(self, ax = None, c = None, s=1, label="", vg_offset = 0, scatter=True):
         """Plots the scaled conductivity data versus gate voltage"""
         ax1 = Meas_GatedResistance.__scatterVG(self.conductivity_data[:,0:2], ax=ax, s=s, c=c, label=label, vg_offset=vg_offset, scatter=scatter)
         ax1.set_ylabel("Conductivity (S)") if self.is2D else ax1.set_ylabel("Conductivity (S cm$^{1}$)")
-        return
+        return ax1
 
 class Meas_Temp_GatedResistance():
     """ Class to handle temperature indexed multiple sweeps of gated data.
@@ -317,6 +317,10 @@ class Meas_Temp_GatedResistance():
         X = (T_1D, VG_1D)
         #Calculate function output
         param_resistivity = function(X, *params)
+
+        self.last_vg = VG_1D
+        self.last_T = T_1D
+        self.last_res = param_resistivity
 
         #Plot result
         if c is None:

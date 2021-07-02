@@ -133,7 +133,7 @@ class Graphene_Gated():
 
         ## Find data window within range:
         # Get values greater than
-        gt_factor_min_indexes = np.where(MGR_Obj.conductivity_data[:,1] > 2*np.min(MGR_Obj.conductivity_data[:,1]))[0]
+        gt_factor_min_indexes = np.where(MGR_Obj.conductivity_data[:,1] > factor*np.min(MGR_Obj.conductivity_data[:,1]))[0]
         # take first below min_index
         search = np.where(gt_factor_min_indexes <= min_sigma_i)[0]
         if len(search) > 0:
@@ -331,7 +331,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
 
@@ -372,7 +372,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_Generic(temp[i1:i2],vg[i1:i2],(a1,B1,E0))
 
@@ -415,7 +415,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
 
@@ -455,7 +455,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2(temp[i1:i2],vg[i1:i2],(a1,B1))
 
@@ -498,7 +498,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da) + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
 
@@ -541,7 +541,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_ROP_SiO2_Ga2O3(temp[i1:i2],vg[i1:i2],(a1,B1))
 
@@ -581,7 +581,7 @@ class Graphene_Phonons():
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
             i1 = indexes[0]
-            i2 = indexes[-1]
+            i2 = indexes[-1]+1 #Has to include the last index, not limit to it.
             #Calculate for each set of indexes
             retVal[i1:i2] = R0[i] + Graphene_Phonons.rho_LA(temp[i1:i2], Da)
 
