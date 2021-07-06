@@ -222,6 +222,37 @@ class Meas_Temp_GatedResistance():
         self.vg = np.array(vg)
         self.resistivity = np.array(resistivity)
         self.ylabel = "Resistivity ($\Omega$)" if is2D else "Resistivity ($\Omega$m)"
+
+        ### Check for null columns or rows in resistivity data.
+        # Clone original resistances
+        new_res = np.copy(self.resistivity)
+        new_vg = np.copy(self.vg)
+        new_temps = np.copy(self.temps)
+        # Find temperatures which are all Vg are null
+        slices = []
+        for k in range(self.resistivity.shape[0]):
+            if np.all(np.isnan(self.resistivity[k,:])==True):
+                slices.append(k)
+        if len(slices) > 0:
+            warnings.warn("Warning: Rows corresponding to T = " + str(self.temps[slices]) + " only contain NaN values, and are being removed.")
+            new_res = np.delete(new_res, slices, axis=0)
+            new_temps = np.delete(new_temps, slices)
+
+        # Find voltages which all temperatures are null
+        slices2 = []
+        for l in range(self.resistivity.shape[1]):
+            if np.all(np.isnan(self.resistivity[:,l])==True):
+                slices2.append(l)
+        if len(slices2) > 0:
+            warnings.warn("Warning: Columns corresponding to Vg = " + str(self.vg[slices2]) + " only contain NaN values, and are being removed.")
+            new_res = np.delete(new_res, slices2, axis=1)
+            new_vg = np.delete(new_vg, slices2)
+        # Set arrays to new object.
+        if len(slices) > 0 or len(slices2) > 0:
+            self.vg = new_vg
+            self.temps = new_temps
+            self.resistivity = new_res
+
         #Check dimensions matchup.
         if not (self.temps.shape[0] == self.resistivity.shape[0] and self.vg.shape[0] == self.resistivity.shape[1]):
             raise ValueError("Dimension mismatch: Temperature and gate voltage arrays didn't match dimensions of resisitivty array.")

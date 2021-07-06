@@ -327,6 +327,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -368,6 +372,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f." % len(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -406,11 +414,14 @@ class Graphene_Phonons():
         temp_steps = len(temp)/vg_steps
 
 
-
         #Setup new matrix for returning generated values.
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -451,6 +462,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -494,6 +509,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -537,6 +556,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
@@ -577,6 +600,10 @@ class Graphene_Phonons():
         retVal = np.zeros(temp.shape)
         # Corrected function checks for unique values in vg (the steps) and identifies positions.
         vg_elements = np.unique(vg)
+
+        if vg_steps != len(vg_elements):
+            raise ValueError("The number or gate resistance offset parameters, %0.0f" % vg_steps + " does not equal the number of unique voltages, %0.0f" % len(vg_elements) + ". List of VGs: " + str(vg_elements))
+
         for i in range(0,vg_steps):
             indexes = np.where(vg == vg_elements[i])[0]
             #Define the indexes of 2D data along 1D dimension.
