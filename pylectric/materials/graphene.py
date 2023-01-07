@@ -3,8 +3,10 @@ __version__ = "0.1.0" #Re-worked temperature and gated behaviour.
 from scipy.signal import savgol_filter, argrelextrema
 import numpy as np
 import math
-from pylectric.geometries.FET import hallbar
-from pylectric.geometries.FET.hallbar import Meas_GatedResistance, Meas_Temp_GatedResistance
+from pylectric.geometries import hallbar_FET
+from pylectric.geometries.hallbar_FET import Meas_GatedResistance, Meas_Temp_GatedResistance
+import matplotlib.pyplot as plt
+import warnings
 
 class Graphene_Gated():
     def mobility_dtm_peaks(data, order=10):
@@ -27,17 +29,120 @@ class Graphene_Gated():
             #Above value not found. Check lower ValueError
             below_I = np.where(maxima < minI)[0]
             if below_I.shape[0] == 0:
+                # Below value also not found.
                 return (None, None)
             else:
                 below_I = below_I[-1]
                 return (maxima[below_I], None)
         else:
+            # Above value found.
             above_I = above_I[0]
             if above_I == 0:
+                # Below value not found.
                 return (None, maxima[above_I])
             else:
                 return (maxima[above_I-1], maxima[above_I])
 
+
+    def fit_min_cond_infletion(MGR_Obj, pre_window = 101.0, post_window = 101.0, lin_v_width=10.0, Cg = None, order=10, debug=False):
+        """ Fits a the linear parts of the conductivity by finding the infletion point (or turning point for the mobility).
+            Inputs:
+                - Uses data that is multiplicatively either side of the inflection point by "lin_v_width" volts.
+                - "Post-window" and "pre-window" are the smoothening windows to generate a clear DTM mobility peak signature.
+                - "Cg" is the gate capacitance of the MGR_Obj. If not provided will check the MGR object for it's own attribute..
+                - "order" is the amount of data points over which the maximum needs to fit. Higher will fit better.
+            Returns:
+                - Dirac Point (Volts)
+                - index of dirac point in objct data.
+                - Line functions for two objects
+                - data for fitting (two objects).
+                - residuals for both fits (two objects)
+
+        """
+        if not type(MGR_Obj) is Meas_GatedResistance:
+            raise(AttributeError("Passed object is not an instance of pylectric.geometries.FET.hallbar.Meas_GatedResistance. Is intead: " + str(MGR_Obj.__class__())))
+            # mobility = MGR_Obj.mobility_dtm_2D()
+
+        if Cg is None:
+            if MGR_Obj.Cg is None:
+                raise(AttributeError("No gate capacitance (Cg) value provided or in MGR_Obj. Cannot calculate mobility."))
+            else:
+                Cg = MGR_Obj.Cg
+
+        ### Find inflection points by using Mobility DTM fitting.
+        # Smooth Conductivity data
+        data = MGR_Obj.conductivity_data
+        data_smooth = savgol_filter(data, window_length=math.ceil(pre_window/2), polyorder=2, axis=0)
+        # Calculate mobility
+        dd = np.diff(data_smooth, axis=0)
+        grad = np.abs(dd[:,1] / dd[:,0])
+        mu_dtm = 1.0 / Cg * grad * 1.0E4
+        #Pack into array
+        mu_dtm_2D = np.zeros((len(mu_dtm), 2))
+        mu_dtm_2D[:,1] = mu_dtm
+        mu_dtm_2D[:,0] = data_smooth[:-1,0] + dd[:,0]
+
+        #Smoothen Mobility
+        mob_smooth = savgol_filter(mu_dtm_2D, window_length=math.ceil(post_window/2), polyorder=2, axis=0)
+        # Find peak DTM values
+        (i1,i2) = Graphene_Gated.mobility_dtm_peaks(mob_smooth[:,1], order=order)
+        #For None case, default values to endpoints and alert.
+        if i1 is None:
+            i1 = 0
+            warnings.warn("Warning: First index i1 did not find a peak mobility. Defaulting to first datapoint.")
+        if i2 is None:
+            i2 = -1
+            warnings.warn("Warning: Second index i2 did not find a peak mobility. Defaulting to last datapoint.")
+
+        v1 = mob_smooth[i1,0]
+        v2 = mob_smooth[i2,0]
+        m1 = mob_smooth[i1,1]
+        m2 = mob_smooth[i2,1]
+
+        if debug:
+            fig, ax = plt.subplots(1,1)
+            ax.plot(mu_dtm_2D[:,0], mu_dtm_2D[:,1], 'y')
+            ax.plot(mob_smooth[:,0], mob_smooth[:,1], 'r')
+            ax.plot([v1,v1],[0,m1])
+            ax.plot([v2,v2],[0,m2])
+
+        # Find local gradient within voltage window at those peak mobilities.
+        vvalid_1 = np.where((-lin_v_width/2.0 < mob_smooth[:,0] - mob_smooth[i1,0]) & (mob_smooth[:,0] - mob_smooth[i1,0] < lin_v_width/2.0))[0]
+        # print(i2)
+        vvalid_2 = np.where((-lin_v_width/2.0 < mob_smooth[:,0] - mob_smooth[i2,0]) & (mob_smooth[:,0] - mob_smooth[i2,0] < lin_v_width/2.0))[0]
+        # Take first and last indexes
+        # print(vvalid_1)
+        # print(vvalid_2)
+        (vvalid_1_i1, vvalid_1_i2) = vvalid_1[[0,-1]]
+        (vvalid_2_i1, vvalid_2_i2) = vvalid_2[[0,-1]]
+        subset1 = data[vvalid_1_i1:vvalid_1_i2,:]
+        subset2 = data[vvalid_2_i1:vvalid_2_i2,:]
+        # Fit linear to that range.
+        lin1, *lst1 = np.polynomial.polynomial.Polynomial.fit(x=subset1[:,0],y=subset1[:,1], deg=1, full=True)
+        lin2, *lst2 = np.polynomial.polynomial.Polynomial.fit(x=subset2[:,0],y=subset2[:,1], deg=1, full=True)
+        lin1 = lin1.convert(domain=[-1,1])
+        lin2 = lin2.convert(domain=[-1,1])
+        resid1 = lst1[0][0]
+        resid2 = lst2[0][0]
+        # Get coefficients
+        b1,a1 = lin1.coef.tolist()
+        b2,a2 = lin2.coef.tolist()
+        # Calculate intercept
+        # b1 + a1x = b2 + a2x
+        x = (b2-b1)/(a1-a2)
+        i = np.where(np.min(np.abs(data[:,0] - x)) == np.abs(data[:,0] - x))[0]
+        if len(i) == 1:
+            i = i[0]
+        else:
+            print("multiple values of min ", i)
+            i = i[0]
+        # Plot results
+        if debug:
+            fig, ax = plt.subplots(1,1)
+            ax.plot(data[:,0], data[:,1])
+            ax.plot(data[:i,0], lin1(data[:i,0]), "--k")
+            ax.plot(data[i:,0], lin2(data[i:,0]), "--k")
+        return x, i, (lin1, lin2), (subset1, subset2), (resid1, resid2)
 
     def sigma_graphene(vg, *p0):
         """ Models impurity dominated conductivity in graphene.
@@ -113,7 +218,7 @@ class Graphene_Gated():
 
         return MGR_Obj.global_RVg_fit(Graphene_Gated.sigma_graphene, params=x0, boundsU=defaultBoundsU, boundsL=defaultBoundsL)
 
-    def fit_min_cond_quadratic(MGR_Obj, factor=2):
+    def fit_min_cond_quadratic(MGR_Obj, factor=2.0):
         """ Fits a quadratic to the minimum conductivity curvature to find the dirac point voltage.
             Uses data that is multiplicatively within the minimum conductivity by "factor".
             Returns:
@@ -132,8 +237,8 @@ class Graphene_Gated():
         sigma_pud_e = MGR_Obj.conductivity_data[min_sigma_i,1]
 
         ## Find data window within range:
-        # Get values greater than
-        gt_factor_min_indexes = np.where(MGR_Obj.conductivity_data[:,1] > factor*np.min(MGR_Obj.conductivity_data[:,1]))[0]
+        # Get values greater than, so can check if values above and below
+        gt_factor_min_indexes = np.where(MGR_Obj.conductivity_data[:,1] > factor*sigma_pud_e)[0]
         # take first below min_index
         search = np.where(gt_factor_min_indexes <= min_sigma_i)[0]
         if len(search) > 0:
@@ -143,15 +248,19 @@ class Graphene_Gated():
             # Fit to data range:
             subset = MGR_Obj.conductivity_data[sigma_i1:sigma_i2,:]
         else:
-            # No point less than the minimum. But maybe something after!
-            sigma_i2 = gt_factor_min_indexes[0] #next index will be closest after
-            subset = MGR_Obj.conductivity_data[0:sigma_i2,:]
-        quad = np.polynomial.polynomial.Polynomial.fit(x=subset[:,0],y=subset[:,1], deg=2).convert(domain=[-1,1])
+            # No before the minimum. But maybe something after!
+            sigma_i1 = gt_factor_min_indexes[0] #First index after
+            sigma_i2 = gt_factor_min_indexes[-1] #Last index.
+            subset = MGR_Obj.conductivity_data[sigma_i1:sigma_i2,:]
+            # print("ummmmm....")
+        quad, *lst = np.polynomial.polynomial.Polynomial.fit(x=subset[:,0],y=subset[:,1], deg=2, full=True)
+        quad = quad.convert(domain=[-1,1])
+        resid = lst[0][0]
 
         # Calculate
         c,b,a = quad.coef.tolist()
         x_tp = - b / (2*a) #turning point, in otherwords dirac point voltage.
-        return x_tp, quad, subset[:,0]
+        return x_tp, quad, subset[:,0], resid
 
     def carrier_density(gate_voltage, gate_capacitance):
         """ Calculates the gated carrier density in graphene.
@@ -215,6 +324,32 @@ class Graphene_Phonons():
         # Value
         return (h / np.power(e,2)) * (np.power(np.pi,2) * np.power(Da * e, 2) * kB * temp) / (2 * np.power(h,2) * rho_s * np.power(vs * vf, 2))
 
+    def rho_ROP_List(temp, vg, params=None, energies=None, couplings=None):
+        # Constants
+        e = 1.60217662e-19 #C
+        kB = 1.38e-23 #m^2 kg s^-2 K^-1
+        # kB = 8.617333262145e-5 #eV K^-1
+        h = 6.62607004e-34
+
+        if params is not None:
+            a1,B1 = params
+        else:
+            return None
+
+        expFactor = 0
+        if energies is not None and couplings is not None:
+            if len(energies) != len(couplings):
+                raise IndexError("The size of energies and couplings do not match.")
+            else:
+                for i in range(len(energies)):
+                    expFactor += couplings[i] * np.reciprocal(np.exp(e * energies[i] / kB * np.reciprocal(temp)) - 1)
+        else:
+            return None
+        c1 = B1 * h / np.power(e,2)
+        c2 = np.power(np.abs(vg), -a1)
+        coefFactor = c1 * c2
+        return expFactor * coefFactor
+
     #KEEP
     def rho_ROP_SiO2(temp, vg, params = (1,2), energies=None, couplings=None): #Params: (A1, B1)
         """ Models contribution of remote surface optical phonons,
@@ -231,21 +366,17 @@ class Graphene_Phonons():
 
         expFactor = 0
         if energies is not None and couplings is not None:
-            if len(energies) != len(couplings):
-                raise IndexError("The size of energies and couplings do not match.")
-            else:
-                for i in range(len(energies)):
-                    expFactor += couplings[i] * np.reciprocal(np.exp(e * energies[i] / kB * np.reciprocal(temp)) - 1)
+            return Graphene_Phonons.rho_ROP_List(temp, vg, params, energies, couplings)
         else:
             # SiO2 phonon modes and couplings.
             e0,e1 = (59e-3, 155e-3)
             g0,g1 = (1.75e-3, 9.396e-3)
             expFactor = (g0 * np.reciprocal(np.exp(e * e0 / kB * np.reciprocal(temp)) - 1) +
                          g1 * np.reciprocal(np.exp(e * e1 / kB * np.reciprocal(temp)) - 1))
-        c1 = B1 * h / np.power(e,2)
-        c2 = np.power(np.abs(vg), -a1)
-        coefFactor = c1 * c2
-        return expFactor * coefFactor
+            c1 = B1 * h / np.power(e,2)
+            c2 = np.power(np.abs(vg), -a1)
+            coefFactor = c1 * c2
+            return expFactor * coefFactor
 
     #KEEP
     def rho_ROP_SiO2_Ga2O3(temp, vg, params = (1,2), energies=None, couplings=None): #Params: (A1, B1)

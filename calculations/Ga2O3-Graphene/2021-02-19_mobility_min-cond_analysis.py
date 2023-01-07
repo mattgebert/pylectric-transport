@@ -17,7 +17,7 @@ import math
 
 # from pylectric.materials.graphene import RVG_data, fitParamsRvG, fitSet, RvT_data
 from pylectric.parsers.RVG import RVG_file
-from pylectric.geometries.FET.hallbar import Meas_GatedResistance
+from pylectric.geometries.hallbar_FET import Meas_GatedResistance
 from pylectric.materials import graphene, sio2
 
 ### ----------------------------------------------------------------------------------------------------------------------------- ###
