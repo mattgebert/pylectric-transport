@@ -68,5 +68,9 @@ class hallbar_measurement():
         newobj.geom = self.geom
         newobj.params = self.params.copy()
         return 
+    
+    def plots():
+        fig, ax = plt.subplots()
+        return 
 
     

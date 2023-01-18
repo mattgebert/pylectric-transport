@@ -46,10 +46,11 @@ def remove_duplicate_columns(A, labels):
     unique_ind = np.array(inds, dtype=np.dtype(np.int32))
     B = np.delete(B, unique_ind, axis=1)
     new_labels = labels
-    print("Removing duplicate data columns:")
-    for i in sorted(unique_ind, reverse=True):
-        print("...\t" + labels[i])
-        del new_labels[i]
+    if len(unique_ind) != 0:
+        print("Removing duplicate data columns:")
+        for i in sorted(unique_ind, reverse=True):
+            print("...\t" + labels[i])
+            del new_labels[i]
     return (B, new_labels)
 
 def arrange_by_label(A, labels, labels_ref):
@@ -91,7 +92,7 @@ def arrange_by_label(A, labels, labels_ref):
         if label not in labels_ref:
             extra_indexes.append(j)
             extra_labels.append(label)
-    B = B[new_indexes + extra_indexes,:]
+    B = B[:,new_indexes + extra_indexes]
     return B, new_labels + extra_labels
 
 

@@ -7,20 +7,31 @@ from pylectric.signals import importing, conversion
 
 class OxfordCryoNanonisFile():
     def __init__(self, file) -> None:
-        self.data, self.labels, self.params = OxfordCryoNanonisFile.filereader(file)
+        self.fname = None
+        if type(file) == str:
+            self.fname = file
+            filebuffer = open(file)
+        elif type(file) == TextIOWrapper:
+            filebuffer = file
+            self.fname = file.name
+        else:
+            raise IOError("Object passed was not a valid file/filename.")
+        
+        self.data, self.labels, self.params = OxfordCryoNanonisFile.filereader(
+            filebuffer)
         return
+    
+    def filename(self):
+        if self.fname is None:
+            raise AttributeError("No file specified")
+        else:        
+            return self.fname.split("\\")[-1]
     
     def to_DataFrame(self):
         return pd.DataFrame(self.data, columns=self.labels)
     
-    def filereader(filename):
-        
-        if type(filename) == str:
-            filereader = open(filename)
-        elif type(filename) == TextIOWrapper:
-            filereader = filename
-        else:
-            raise IOError("Object passed was not a valid file/filename.")
+    def filereader(filebuffer):
+        assert type(filebuffer) == TextIOWrapper
         
         params = {}
         data = []
@@ -29,7 +40,7 @@ class OxfordCryoNanonisFile():
         indata = False # To grab data titles
         
         #iterate through file to acquire data and info.
-        for line in filereader:
+        for line in filebuffer:
             if atdata == False:
                 if "[DATA]" in line:
                     atdata = True
