@@ -64,8 +64,13 @@ class OxfordCryoNanonisFile():
         
         ### Construct new object.
         # Find indexes of field, rxx, rxy in data.
+        
+        print(self.data)
+        
         arranged_data, arranged_labels = importing.arrange_by_label(
             A=self.data, labels=self.labels, labels_ref=[field_label, rxx_label, rxy_label])
+        
+        print(arranged_data)
         
         field = arranged_data[:,0]
         rxx = arranged_data[:,1]

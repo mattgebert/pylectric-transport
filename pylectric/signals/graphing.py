@@ -1,3 +1,4 @@
+import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 import numpy as np
@@ -33,21 +34,21 @@ class acsJournals:
     })
 
 
-class electronic_graph():
+class transport_graph():
     
     defaultParams = {
 
     }
     
-    def __init__(self, *ax) -> None:
+    def __init__(self, *axfig) -> None:
         """_summary_
         Args:
-            ax (Axes): Multiple Matplotlib Axes object.
+            axfig (List of Axes | Single Figure): Multiple Matplotlib Axes objects or a single Matplotlib Figure.
         """
         
         self.fig = None
         self.ax = []
-        for obj in ax:
+        for obj in axfig:
             if isinstance(obj, plt.Axes):
                 self.ax.append(obj)
                 if self.fig is None:
@@ -55,39 +56,24 @@ class electronic_graph():
                 else:
                     if self.fig != obj.get_figure():
                         raise AttributeError("Provided axis don't belong to the same figure")
+            elif isinstance(obj, plt.Figure) and len(axfig) == 1:
+                self.fig = obj
+                for axis in obj.axes:
+                    self.ax.append(axis)
+            else:
+                raise TypeError("'axfig' was not a list of plt.Axes objects or a single Figure object.")
         return
     
     def setDefaultParams(self, i=None):
         if self.fig:
             self.setDefaultTicks(i)
             self.fig.setParams(acsJournals.acsNano_1Col_Params)
-            self.fig.setParams(electronic_graph.defaultParams)
+            self.fig.setParams(transport_graph.defaultParams)
         return
 
     def setParams(self, rcParams, i=None):
         self.fig.setParams(rcParams)
         return
-    
-    def _apply_fn_to_axes(self, fn, i=None, *args):
-        """Expands function to be applied to single or multiple instances
-        of axes depending on whether i is specified.
-
-        Args:
-            fn (function): Function that can be applied to a plt.Axes object.
-            i (int, optional): Index for axes. Defaults to None (implying all axes).
-        """
-        #Typechecking
-        assert type(fn) == function
-        assert type(i) == int or i is None
-        if i > len(self.ax):
-            raise IndexError("Index i=" + str(i) + " outside ")
-        # Multiple Axes
-        if not i:
-            for axis in self.ax:
-                fn(axis, *args)
-        # Single Axes
-        else:
-            fn(self.ax[i], *args)
     
     def _unit_prefix(order=0):
         
@@ -131,11 +117,50 @@ class electronic_graph():
         self._apply_fn_to_axes(plt.Axes.xaxis.set_major_locator, i=i, *defaultTicker)
         return
     
+    def _apply_fn_to_axes(self, fn, i=None, *args):
+        """Expands function to be applied to single or multiple instances
+        of axes depending on whether i is specified.
+
+        Args:
+            fn (function): Function that can be applied to a plt.Axes object.
+            i (int, optional): Index for axes. Defaults to None (implying all axes).
+        """
+        # Typechecking
+        assert callable(fn)
+        assert type(i) == int or i is None
+
+        # Multiple Axes
+        if not i:
+            for axis in self.ax:
+                fn(axis, *args)
+        # Single Axes
+        else:
+            if i > len(self.ax):
+                raise IndexError("Index i=" + str(i) + " outside bounds.")
+            fn(self.ax[i], *args)
+    
+    ####################################################################################
+    #########################        Axes Labelling            #########################
+    ####################################################################################
+    # x-Axis Labels:
+
+    def xFieldT(self, i=None, order=0):
+        label = r"$B$ (" + transport_graph._unit_prefix(order) + r"T)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
+
+    def xFieldOe(self, i=None, order=0):
+        label = r"$B$ (" + transport_graph._unit_prefix(order) + r"Oe)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
+
+    def xGateV(self, i=None, order=0):
+        label = r"$V_g$ (" + transport_graph._unit_prefix(order) + r"V)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
+    
     ### y-Axis Labels:
     
     def yMobility(self, i=None, order=0):
-        label = r"$\mu$ (" + electronic_graph._unit_prefix(order) + r"m$^2$/Vs)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+        label = r"$\mu$ (" + transport_graph._unit_prefix(order) + r"m$^2$/Vs)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
     
     def yMobilityCm(self, i=None, order=0):
         self.yMobility(i=i, order=-2)
@@ -143,51 +168,38 @@ class electronic_graph():
     def yConductivity(self, i=None, order=0, subscript=""):
         
         label = r"$\sigma_{"+subscript + \
-            r"}$ (" + electronic_graph._unit_prefix(order) + r"S)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+            r"}$ (" + transport_graph._unit_prefix(order) + r"S)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yConductivityQuantum2(self, i=None, subscript=""):
         label = r"$\sigma_{"+subscript+r"}$ ($2e^2/h$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yConductivityQuantum2(self, i=None, subscript=""):
         label = r"$\sigma_{"+subscript+r"}$ ($e^2/h$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yResistivity(self, i=None, order=0, subscript=""):
         label = r"$\rho_{"+subscript + \
-            r"}$ (" + electronic_graph._unit_prefix(order) + r"$\Omega$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+            r"}$ (" + transport_graph._unit_prefix(order) + r"$\Omega$)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yResistivityQuantum(self, i=None, subscript=""):
         label = r"$\rho_{"+subscript+r"}$ ($h/e^2$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yResistivityQuantum2(self, i=None,subscript=""):
         label = r"$\rho_{"+subscript+r"}$ ($h/2e^2$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yConductance(self, i=None, order=0, subscript=""):
         label = r"$G_{"+subscript + r"}$ (" + \
-           electronic_graph._unit_prefix(order) + r"S)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+           transport_graph._unit_prefix(order) + r"S)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     def yResistance(self, i=None, order=0, subscript=""):
         label = r"$R_{"+subscript + r"}$ (" + \
-            electronic_graph._unit_prefix(order) + r"$\Omega$)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
+            transport_graph._unit_prefix(order) + r"$\Omega$)"
+        self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         
     
-    ### x-Axis Labels:
-        
-    def xFieldT(self, i=None, order=0):
-        label = r"$B$ (" + electronic_graph._unit_prefix(order) + r"T)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
-    
-    def xFieldOe(self, i=None, order=0):
-        label = r"$B$ (" + electronic_graph._unit_prefix(order) + r"Oe)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])
-
-    def xGateV(self, i=None, order=0):
-        label = r"$V_g$ (" + electronic_graph._unit_prefix(order) + r"V)"
-        self._apply_fn_to_axes(plt.Axes.set_ylabel, i=i, *[label])

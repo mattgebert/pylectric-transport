@@ -1,12 +1,19 @@
+# Function Libraries
 import numpy as np
 import matplotlib.pyplot as plt
-import warnings
 from scipy.signal import savgol_filter
 from scipy import optimize as opt
-from pylectric.analysis import mobility
+# Custom Libraries
 import pylectric
+from .geo_base import graphable_base
+from pylectric.analysis import mobility
+from pylectric.signals import graphing
+# Programming Syntax
+import warnings
+from overrides import override
+from abc import abstractmethod
 
-class hallbar_measurement():
+class hallbar_measurement(graphable_base):
     """Takes into account a hall measurement, that is magnetic field and Rxx and Rxy of a device.
         Does not assume gated geometry, however does assume magnetic measurement for the purpose of Rxy data.
         
@@ -46,6 +53,9 @@ class hallbar_measurement():
         
         self.params = params
         
+        #initialise super object
+        super().__init__()
+        
         return
     
     def symmterise(): # -> tuple[hallbar.hallbar_measurement, hallbar.hallbar_measurement]:
@@ -69,8 +79,27 @@ class hallbar_measurement():
         newobj.params = self.params.copy()
         return 
     
-    def plots():
-        fig, ax = plt.subplots()
-        return 
+    @override
+    def plot_all_data(self) -> graphing.transport_graph:
+        tg = super().plot_all_data()
+        tg.xFieldT()
+        tg.yResistivity(i=0, subscript="xx")
+        tg.yResistivity(i=1, subscript="xy")
+        keys = list(self.dataseries) #indexing - not efficient for many data series, but okay for a small ammount (<10,000)
+        for i in range(2, 2 + len(self.dataseries)):
+            tg.ax[i].set_ylabel(keys[i-2])
+        return tg
+
+    @override
+    def ind_vars(self):
+        return np.c_[self.rhoxx, self.rhoxy]
+
+    @override
+    def dep_vars(self):
+        return self.field
+    
+    @override
+    def extra_vars(self):
+        return np.c_[*[self.dataseries[key] for key in self.dataseries]]
 
     
