@@ -1,0 +1,3 @@
+
+class ShubnikovDeHaas(B, Rxx):
+    
