@@ -124,6 +124,14 @@ class hallbar_measurement(geo_base.graphable_base):
         return tg
 
     @override
+    def plot_dep_vars(self, axes=None, label=None) -> graphwrappers.transport_graph:
+        tg = self.plot_dep_vars(axes, label)
+        tg.xFieldT(i=-1)
+        tg.yResistivity(i=0, subscript="xx")
+        tg.yResistivity(i=1, subscript="xy")
+        return tg
+
+    @override
     def ind_vars(self):
         return self.field
 
@@ -135,4 +143,52 @@ class hallbar_measurement(geo_base.graphable_base):
     def extra_vars(self):
         return np.c_[*[self.dataseries[key] for key in self.dataseries]]
 
+    def plot_MR_percentages(self, ax = None, label=None):
+        #Get zero field location
+        minfield = np.min(np.abs(self.field))
+        i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
+        i = np.round(np.average(i)) #average min field value positions if multiple, round to nearest.
+        #Prepare zero field substracted data.
+        MR_rxx = self.rhoxx - self.rhoxx[i]
+        MR_rxx /= self.rhoxx[i]
+        MR_rxy = self.rhoxy - self.rhoxy[i]
+        MR_rxy /= self.rhoxy[i]
+        data = np.c_[self.field, MR_rxx, MR_rxy]
+        # Plots!
+        tg = self._plot_2Ddata(data, ax=ax, label=label)
+        tg.xField(i=-1)
+        tg.yMR_percentage(i=0, subscript="xx")
+        tg.yMR_percentage(i=1, subscript="xy")
+        return tg
     
+    def plot_MR_absolute(self, ax = None, label=None):
+        # Get zero field location
+        minfield = np.min(np.abs(self.field))
+        i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
+        # average min field value positions if multiple, round to nearest.
+        i = np.round(np.average(i))
+        # Prepare zero field substracted data.
+        MR_rxx = self.rhoxx - self.rhoxx[i]
+        MR_rxy = self.rhoxy - self.rhoxy[i]
+        data = np.c_[self.field, MR_rxx, MR_rxy]
+        # Plots!
+        tg = self._plot_2Ddata(data, ax=ax, label=label)
+        tg.xFieldT(i=-1)
+        tg.yMR_absolute(i=0, subscript="xx")
+        tg.yMR_absolute(i=1, subscript="xy")
+        return tg
+    
+
+    def plot_magnetoresistance_p(self, ax=None, label=None):
+        """Alias for plot_MR_percentages"""
+        return self.plot_MR_percentages(ax, label)
+    def plot_magnetoresistance_a(self, ax=None, label=None):
+        """Alias for plot_MR_absolute"""
+        return self.plot_MR_absolute(ax, label)
+    
+    def plot_Shubnikov_deHass(self,ax = None, label=None):
+        data = np.c_[1/self.field[::-1], self.rxy[::-1]]
+        tg = self._plot_2Ddata(data, ax=ax, label=label)
+        tg.xFieldInverseT(i=-1)
+        tg.yMR_absolute(i=-1, subscript="xy")
+        return

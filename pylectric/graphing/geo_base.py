@@ -80,13 +80,27 @@ class graphable_base(metaclass=ABCMeta):
         
         return tg
     
-    def _plot_2Ddata(data, axes=None, label=None):
+    def _plot_2Ddata(data, axes=None, label=None) -> graphwrappers.transport_graph:
+        """Plots 2D data, that is multiple dependent variables against a single independent variable.
+
+        Args:
+            data (Numpy NDArray): Column 0 corresponds to independent variable, columns 1 onward correspond to dependent variables.
+            axes (matplotlib.axis.Axis, optional): Plots onto existing axis if provided. Defaults to None.
+            label (string, optional): plot series label. Defaults to None.
+
+        Raises:
+            AttributeError: Mismatch in number of dependent variables and provided axes.
+
+        Returns:
+            _type_: _description_
+        """
         assert isinstance(data, np.ndarray)
         assert axes is None or isinstance(axes, plt.Axes) or (isinstance(
             axes, list) and isinstance(axes[0], plt.Axes))
         assert len(data.shape) == 2
-        
         nd = data.shape[-1] - 1
+        
+        
         if axes is None:
             fig,axes = plt.subplots(nd, 1)
             # Graphing wrapper
@@ -108,7 +122,7 @@ class graphable_base(metaclass=ABCMeta):
                 
         return tg
     
-    def _plot_3Ddata(data, axes=None, label=None):
+    def _plot_3Ddata(data, axes=None, label=None) -> graphwrappers.transport_graph:
         #TODO: update to match _plot_2Ddata methods...
         assert isinstance(data, np.ndarray)
         dl = len(data.shape)
@@ -160,8 +174,6 @@ class graphable_base(metaclass=ABCMeta):
         elif li == 2 or li == 3:
             data = np.c_[vari, vard, vare]
             tg = graphable_base._plot_3Ddata(data, axes, label)
-        elif li == 3:
-            tg = graphable_base._plot_3Ddata(data, axes, label)
         else:
             raise AttributeError("Too many independent variables")
         
@@ -170,13 +182,84 @@ class graphable_base(metaclass=ABCMeta):
                 if graphwrappers.transport_graph.use_pylectric_rcparams:
                     legend.delete()
             for ax in tg.ax:
-                ax.legend()
-    
+                lgnd = ax.legend()
+                for handle in lgnd.legendHandles:
+                    handle.set_sizes([10])
         return tg
 
-    # def plot_data(self, cols):
-    #     tg = 
+    def plot_dep_vars(self, axes=None, label=None):
+        """Generates a plot of all data attached to object.
+        Subplots determined by independent variables (columns) and dependent / extra variables (rows).
+
+        """
+        vari = self.ind_vars()  # 1D array
+        vard = self.dep_vars()  # 2D array
+
+        assert isinstance(vari, np.ndarray)
+        assert isinstance(vard, np.ndarray)
+        if len(vari.shape) > 1:
+            assert vari.shape[:-1] == vard.shape[:-1]
+        elif len(vari.shape) == 1:
+            assert vari.shape[0] == vard.shape[0]
+
+        li = len(vari.shape)
+        if li == 1:
+            data = np.c_[vari, vard]
+            tg = graphable_base._plot_2Ddata(data, axes, label)
+        elif li == 2 or li == 3:
+            data = np.c_[vari, vard]
+            tg = graphable_base._plot_3Ddata(data, axes, label)
+        else:
+            raise AttributeError("Too many independent variables")
+
+        if label:
+            for legend in tg.fig.legends:
+                if graphwrappers.transport_graph.use_pylectric_rcparams:
+                    legend.delete()
+            for ax in tg.ax:
+                lgnd = ax.legend()
+                for handle in lgnd.legendHandles:
+                    handle.set_sizes([10])
+        return tg
+
+    def plot_dep_var(self, i, axes=None, label=None):
+        """Generates a plot of all data attached to object.
+        Subplots determined by independent variables (columns) and dependent / extra variables (rows).
+
+        """
+        vari = self.ind_vars()  # 1D array
+        vard = self.dep_vars()  # 2D array
+
+        assert isinstance(vari, np.ndarray)
+        assert isinstance(vard, np.ndarray)
+        if len(vari.shape) > 1:
+            assert vari.shape[:-1] == vard.shape[:-1]
+        elif len(vari.shape) == 1:
+            assert vari.shape[0] == vard.shape[0]
+
+        li = len(vari.shape)
+        if li == 1:
+            data = np.c_[vari, vard]
+            tg = graphable_base._plot_2Ddata(data, axes, label)
+        elif li == 2 or li == 3:
+            data = np.c_[vari, vard]
+            tg = graphable_base._plot_3Ddata(data, axes, label)
+        else:
+            raise AttributeError("Too many independent variables")
+
+        if label:
+            for legend in tg.fig.legends:
+                if graphwrappers.transport_graph.use_pylectric_rcparams:
+                    legend.delete()
+            for ax in tg.ax:
+                lgnd = ax.legend()
+                for handle in lgnd.legendHandles:
+                    handle.set_sizes([10])
+        return tg
+        
+
     
+
 # class graphable_ND_base(graphable_base):
 #     def __init__(self) -> None:
 #         super().__init__()
