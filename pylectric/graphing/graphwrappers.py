@@ -499,6 +499,10 @@ class scalable_graph():
     def _update_Ticks_Labels(self, ax_xy):
         self._updateTicks(ax_xy)
         self._updateUnits(ax_xy)
+        
+    def removeLegend(self):
+        for legend in self.fig.legends:
+            legend.delete()
 
 class transport_graph(scalable_graph):
     
@@ -510,7 +514,7 @@ class transport_graph(scalable_graph):
         Args:
             axfig (List of Axes | Single Figure): Multiple Matplotlib Axes objects or a single Matplotlib Figure.
         """
-        super().__init__()
+        super().__init__(axfig)
         return
     
     def defaults(self, i=None):
@@ -613,7 +617,7 @@ class transport_graph(scalable_graph):
         self._updateY_Ticks_Labels(i)
         
     def yMR_percentage(self, i=None, order=0, subscript=""):
-        label = r"MR$_{" + subscript + r"}$ ($\Omega$)"
+        label = r"MR$_{" + subscript + r"}$ ($\rho/\rho_{B=0}$)"
         self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         self._updateY_Ticks_Labels(i)
     

@@ -6,6 +6,8 @@ from scipy.signal import savgol_filter
 from pylectric.analysis import mobility
 from scipy import optimize as opt
 
+#TODO: Class needs re-organisation
+
 class Meas_GatedResistance():
     """Class to handle a single sweep of raw data. Measures resistance against gate voltage to infer properties."""
 

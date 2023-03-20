@@ -180,7 +180,7 @@ class graphable_base(metaclass=ABCMeta):
         if label:
             for legend in tg.fig.legends:
                 if graphwrappers.transport_graph.use_pylectric_rcparams:
-                    legend.delete()
+                    legend.remove()
             for ax in tg.ax:
                 lgnd = ax.legend()
                 for handle in lgnd.legendHandles:

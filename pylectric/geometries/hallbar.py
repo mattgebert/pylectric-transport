@@ -12,7 +12,7 @@ from overrides import override
 from abc import abstractmethod
 
 class hallbar_measurement(geo_base.graphable_base):
-    """Takes into account a hall measurement, that is magnetic field and Rxx and Rxy of a device.
+    """Class for a hall measurement, that is magnetic field dependence of Rxx and Rxy of a device.
         Does not assume gated geometry, however does assume magnetic measurement for the purpose of Rxy data.
         
         Can provide additional data to add to object, in the form of a dictionary of data {label:numpy_array}.
@@ -112,6 +112,35 @@ class hallbar_measurement(geo_base.graphable_base):
         newobj.params = self.params.copy()
         return newobj
     
+    def __add__(self,x):
+        if not isinstance(x,hallbar_measurement):
+            raise TypeError("'" + str(x) + "' is not a hallbar_measurement object.")
+        else:
+            # check identical parameter lists:
+            if self.geom != x.geom:
+                raise AttributeError("Geometry of " + str(x) + " doesn't match " + str(self))
+            xkeys = x.dataseries.keys()
+            for key1 in self.dataseries.keys():
+                if key1 not in xkeys:
+                    raise AttributeError(key1 + " not found in " + str(x))
+                else:
+                    xkeys.remove(key1)
+            if len(xkeys) > 0:
+                raise AttributeError(xkeys + " are not found in " + str(self))
+            
+            # create new object
+            newobj = self.copy()
+            newobj.rxx = np.r_[newobj.rxx, x.rxx]
+            newobj.rxy = np.r_[newobj.rxy, x.rxy]
+            newobj.rhoxx = np.r_[newobj.rhoxx, x.rhoxx]
+            newobj.rhoxy = np.r_[newobj.rhoxy, x.rhoxy]
+            newobj.field = np.r_[newobj.field, x.field]
+            newobj.sigmaxx = np.r_[newobj.sigmaxx, x.sigmaxx]
+            newobj.sigmaxy = np.r_[newobj.sigmaxy, x.sigmaxy]
+            for key in self.dataseries.keys():
+                self.dataseries[key] = np.r_[self.dataseries[key], x.dataseries[key]]
+            return newobj
+    
     @override
     def plot_all_data(self, axes = None,label=None) -> graphwrappers.transport_graph:
         tg = super().plot_all_data(axes, label)
@@ -125,7 +154,7 @@ class hallbar_measurement(geo_base.graphable_base):
 
     @override
     def plot_dep_vars(self, axes=None, label=None) -> graphwrappers.transport_graph:
-        tg = self.plot_dep_vars(axes, label)
+        tg = super().plot_dep_vars(axes, label)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
@@ -143,11 +172,11 @@ class hallbar_measurement(geo_base.graphable_base):
     def extra_vars(self):
         return np.c_[*[self.dataseries[key] for key in self.dataseries]]
 
-    def plot_MR_percentages(self, ax = None, label=None):
+    def plot_MR_percentages(self, axes = None, label=None):
         #Get zero field location
         minfield = np.min(np.abs(self.field))
         i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
-        i = np.round(np.average(i)) #average min field value positions if multiple, round to nearest.
+        i = int(np.round(np.average(i))) #average min field value positions if multiple, round to nearest.
         #Prepare zero field substracted data.
         MR_rxx = self.rhoxx - self.rhoxx[i]
         MR_rxx /= self.rhoxx[i]
@@ -155,40 +184,40 @@ class hallbar_measurement(geo_base.graphable_base):
         MR_rxy /= self.rhoxy[i]
         data = np.c_[self.field, MR_rxx, MR_rxy]
         # Plots!
-        tg = self._plot_2Ddata(data, ax=ax, label=label)
-        tg.xField(i=-1)
+        tg = hallbar_measurement._plot_2Ddata(data=data, axes=axes, label=label)
+        tg.xFieldT(i=-1)
         tg.yMR_percentage(i=0, subscript="xx")
         tg.yMR_percentage(i=1, subscript="xy")
         return tg
     
-    def plot_MR_absolute(self, ax = None, label=None):
+    def plot_MR_absolute(self, axes = None, label=None):
         # Get zero field location
         minfield = np.min(np.abs(self.field))
         i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
         # average min field value positions if multiple, round to nearest.
-        i = np.round(np.average(i))
+        i = int(np.round(np.average(i)))
         # Prepare zero field substracted data.
         MR_rxx = self.rhoxx - self.rhoxx[i]
         MR_rxy = self.rhoxy - self.rhoxy[i]
         data = np.c_[self.field, MR_rxx, MR_rxy]
         # Plots!
-        tg = self._plot_2Ddata(data, ax=ax, label=label)
+        tg = hallbar_measurement._plot_2Ddata(data, axes=axes, label=label)
         tg.xFieldT(i=-1)
         tg.yMR_absolute(i=0, subscript="xx")
         tg.yMR_absolute(i=1, subscript="xy")
         return tg
     
 
-    def plot_magnetoresistance_p(self, ax=None, label=None):
+    def plot_magnetoresistance_p(self, axes=None, label=None):
         """Alias for plot_MR_percentages"""
-        return self.plot_MR_percentages(ax, label)
-    def plot_magnetoresistance_a(self, ax=None, label=None):
+        return self.plot_MR_percentages(axes, label)
+    def plot_magnetoresistance_a(self, axes=None, label=None):
         """Alias for plot_MR_absolute"""
-        return self.plot_MR_absolute(ax, label)
+        return self.plot_MR_absolute(axes, label)
     
-    def plot_Shubnikov_deHass(self,ax = None, label=None):
+    def plot_Shubnikov_deHass(self,axes = None, label=None):
         data = np.c_[1/self.field[::-1], self.rxy[::-1]]
-        tg = self._plot_2Ddata(data, ax=ax, label=label)
+        tg = self._plot_2Ddata(data, axes=axes, label=label)
         tg.xFieldInverseT(i=-1)
         tg.yMR_absolute(i=-1, subscript="xy")
         return
