@@ -42,8 +42,92 @@ def reduction(data, step, colN=0):
         new_data_std[i,:] = np.std(ind_data, axis=0)
     return x, new_data, new_data_std
 
+def trim_symmetric(data, colN):
+    """Ensures that data is symmetric about the midpoint of ColN of data.
+    ColN can be a list of indexes.
+    Returns (data, (trim_start, trim_mid, trim_end, trim_mid_i)) """
+    # TODO https://en.wikipedia.org/wiki/Bloom_filter
+    # https://stackoverflow.com/questions/497338/efficient-list-intersection-algorithm
+    # Find the largest intersection of two lists
+    
+    #Quick fix solution:
+    # 1. Reverse first list
+    # 2. overlap list from endpoints and see how many elements match.
+    
+    #reverse
+    forward = data[:,colN]
+    backward = data[::-1, colN]
+    
+    #calculate overlaps
+    max_overlap = 0 #biggest overlap vector
+    max_overlap_i = None #distance from beginning of data[:,coln] where vector lies
+    max_overlap_j = None #distance from end of data[:,coln] where vector lies.
+    for len1 in range(len(forward)):
+        for i in range(0,len(forward)-len1):
+            for j in range(0,len(forward)-i-len1):
+                print(i,j)
+                overlap = np.all(forward[i:i+len1] == backward[j:j+len1]) #all have to be overlapping...
+                if overlap and (len1 > max_overlap):
+                    max_overlap = len1
+                    max_overlap_i = i
+                    max_overlap_j = j
+    #return new data
+    newdata = data.copy()
+    newdata = np.r_[newdata[max_overlap_i:max_overlap_i+max_overlap, :], #Component from forward
+                    newdata[len(forward)-max_overlap_j-max_overlap:len(forward)-max_overlap_j, :]] #component from backward
+    trim_start = max_overlap_i
+    trim_end = len(forward) - max_overlap_j
+    trim_mid = len(newdata) - (trim_start + trim_end)
+    trim_mid_i = trim_start + int(len(newdata)/2)
+    return newdata, (trim_start, trim_mid, trim_end, trim_mid_i)
+    
+
+def trim_matching(data1, data2, colN = [0]):
+    """Takes two arrays, and trims the rows to find the maximum overlap of values in colN"""
+    # TODO: FIX NEEDS TESTS.
+    
+    #Combine data into one array, use symmetric matching to find largest overlap area
+    assert data1.shape[1] == data2.shape[1] #columns must match, rows can be different lengths.
+    cdata = np.r_[data1, data2[::-1]] #reverse data2 so it alignes symettrically about the centre for trim_symmetric.
+    symdata, (data1_trim_start, trim_mid, data2_trim_end,
+              trim_mid_i) = trim_symmetric(cdata, colN)
+    
+    data1_trim_end = (len(data1) - trim_mid_i)
+    data1_trimlen = data1_trim_start + data1_trim_end
+    data2_trim_start = (trim_mid - data1_trim_end)
+    data2_trimlen = data2_trim_start + data2_trim_end
+    
+    print("Trim_matching removed", data1_trimlen,
+          "from data1 and", data2_trimlen, "from data2.")
+    midpoint = int(np.round(len(symdata)/2))
+    data1_trim = symdata[:midpoint, :]
+    data2_trim = symdata[midpoint:, :]
+    data2_trim = data2_trim[::-1] #correct reverse
+    
+    return data1_trim, data2_trim
+
+def trim_matching_fromsimilar(data1, data2, colN = [0]):
+    """Takes two arrays, and trims the rows using the following assumptions:
+    1. Step sizes in colN are the same
+    2. One domain is a subset of the other
+    3. Smaller size fits exactly in bigger size."""
+    c = len(data1) > len(data2) #condition
+    d1 = data1[:,colN] if c else data2[:,colN]  # d1 always longer list
+    d2 = data2[:,colN] if c else data1[:,colN]  # d2 alway shorter list
+    trim_len = len(d1)-len(d2)
+    for i in range(trim_len):
+        j = trim_len - i
+        s1 = d1[i:len(d1)-j,colN]
+        if np.all(s1 == d2):
+            d1 = data1.copy()[i:, len(d1)-j]
+            d2 = data2.copy()
+            return d1,d2 if c else d2,d1
+    print(data1[:,colN])
+    print(data2[:,colN])
+    raise AttributeError("The two lists do not immediately match by trimming ends to match size.")
+
 def symmetric_reduction(data, step, colN=0):
-    """Generates same function as 'reduction', but additionally trims the data so that the reduced data is symmetric about colN.
+    """Generates same function as 'reduction', but additionally trims the data so that the reduced data is symmetric about the middle of colN.
 
     Args:
         data (_type_): _description_
@@ -66,8 +150,6 @@ def symmetric_reduction(data, step, colN=0):
     
     x, new_data, new_data_std = reduction(data,step, colN)
     new_data[:, colN] = x #override colN to ensure symmetric data. 
-    
-    print(x)
     
     assert len(x) > 1
     # Modify bounds of data to keep symettric about 0.

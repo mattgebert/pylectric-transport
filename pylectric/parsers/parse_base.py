@@ -49,7 +49,7 @@ class parserFile(metaclass=abc.ABCMeta):
         else:
             return self.fname.split("\\")[-1]
 
-    def to_Hallbar(self, rxx_label="X-Value (V)", rxy_label="X-Value 2 (V)", field_label="Magnetic Field (T)", geom=1):
+    def to_Hallbar(self, rxx_label="X-Value (V)", rxy_label="X-Value 2 (V)", field_label="Magnetic Field (T)", geom=1) -> hallbar.hallbar_measurement:
         # Check if labels exist within data labels for correct identification of data.
         for x in [rxx_label, rxy_label, field_label]:
             if x not in self.labels:
@@ -70,7 +70,7 @@ class parserFile(metaclass=abc.ABCMeta):
         dataseries = {}
         for i in range(len(arranged_labels)-3):
             dataseries[arranged_labels[i+3]] = otherdata[:, i]
-
+        
         if geom != 1:
             hb = hallbar.hallbar_measurement(
                 field=field, rxx=rxx, rxy=rxy, dataseries=dataseries, params=self.params, geom=geom)

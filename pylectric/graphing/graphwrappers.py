@@ -503,6 +503,23 @@ class scalable_graph():
     def removeLegend(self):
         for legend in self.fig.legends:
             legend.delete()
+            
+    def set_legend_handle_size(self, size, i=None):
+        # All axes.
+        if not i:
+            #Remove any figure legends, as we will reproduce all individual legends.
+            for legend in self.fig.legends:
+                legend.remove()
+            for ax in self.ax:
+                lgnd = ax.legend()
+                for handle in lgnd.legendHandles:
+                    handle.set_sizes(size)
+        else: #only one axes
+            ax = self.ax[i]
+            lgnd = ax.get_legend()
+            if lgnd:
+                for handle in lgnd.legendHandles:
+                    handle.set_sizes(size)
 
 class transport_graph(scalable_graph):
     
@@ -617,12 +634,12 @@ class transport_graph(scalable_graph):
         self._updateY_Ticks_Labels(i)
         
     def yMR_percentage(self, i=None, order=0, subscript=""):
-        label = r"MR$_{" + subscript + r"}$ ($\rho/\rho_{B=0}$)"
+        label = r"MR$_{" + subscript + r"}$ [$\rho/\rho_{B=0}$] (A.U.)"
         self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         self._updateY_Ticks_Labels(i)
     
     def yMR_absolute(self, i=None, order=0, subscript=""):
-        label = r"MR$_{" + subscript + r"}$ ($\Omega$)"
+        label = r"MR$_{" + subscript + r"}$ [$\rho - \rho_{B=0}$] ($\Omega$)"
         self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         self._updateY_Ticks_Labels(i)
 

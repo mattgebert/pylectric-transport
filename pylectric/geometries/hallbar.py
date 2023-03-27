@@ -10,8 +10,9 @@ from pylectric.analysis import mobility
 import warnings
 from overrides import override
 from abc import abstractmethod
+import inspect
 
-class hallbar_measurement(geo_base.graphable_base):
+class hallbar_measurement(geo_base.graphable_base_dataseries):
     """Class for a hall measurement, that is magnetic field dependence of Rxx and Rxy of a device.
         Does not assume gated geometry, however does assume magnetic measurement for the purpose of Rxy data.
         
@@ -19,6 +20,8 @@ class hallbar_measurement(geo_base.graphable_base):
     """
     
     def __init__(self, field, rxx, rxy, dataseries = {}, geom = 1, **params):
+        # initialise super object
+        super().__init__(dataseries=dataseries)
         
         ### Valid Datachecking:
         datalen = None #ensure datalength is constant.
@@ -39,16 +42,8 @@ class hallbar_measurement(geo_base.graphable_base):
         
         # Convert rxx, rxy to rhoxx, rhoxy, sigmaxx, sigmaxy
         self._calculateTransport()
-        
-        #Dataseries are other columns of data.
-        self.dataseries = {}
-        for key in dataseries:
-            self.dataseries[key] = dataseries[key].copy()
-        
         self.params = params
         
-        #initialise super object
-        super().__init__()
         
         return
     
@@ -64,7 +59,7 @@ class hallbar_measurement(geo_base.graphable_base):
         #0. Check requirements [datapoints are evenly binned]:
         if not np.alltrue(self.field[:] == -self.field[::-1]):
             raise AttributeError("Field B is not symmetric in field about 0." +
-                " Please use pylectric.signals.processing.reduction to sample data.")
+                " Please use pylectric.signals.processing.reduction to sample data into symmetric bins.")
         
         #1. Create two clones:
         sym_clone = self.copy() #symmetric
@@ -112,14 +107,28 @@ class hallbar_measurement(geo_base.graphable_base):
         newobj.params = self.params.copy()
         return newobj
     
-    def __add__(self,x):
+    def __combine__(self,x):
+        """Appends data together for all fields, including dataseries items.
+
+        Args:
+            x (hallbar_measurement): A secondary measurement object.
+
+        Raises:
+            TypeError: If x is not a hallbar_measurement.
+            AttributeError: Geometry doesn't match
+            AttributeError: Dataseries items not found in x.
+            AttributeError: Extra dataseries items in x.
+
+        Returns:
+            hallbar_measurement: New object with datablocks combined.
+        """
         if not isinstance(x,hallbar_measurement):
             raise TypeError("'" + str(x) + "' is not a hallbar_measurement object.")
         else:
             # check identical parameter lists:
             if self.geom != x.geom:
                 raise AttributeError("Geometry of " + str(x) + " doesn't match " + str(self))
-            xkeys = x.dataseries.keys()
+            xkeys = list(x.dataseries.keys())
             for key1 in self.dataseries.keys():
                 if key1 not in xkeys:
                     raise AttributeError(key1 + " not found in " + str(x))
@@ -142,8 +151,32 @@ class hallbar_measurement(geo_base.graphable_base):
             return newobj
     
     @override
-    def plot_all_data(self, axes = None,label=None) -> graphwrappers.transport_graph:
-        tg = super().plot_all_data(axes, label)
+    def __sub__(self, x, reverse=False):
+        """Performs a diference operation on all rxx,rxy and dataseries data between the object and x.
+
+        Args:
+            x (hallbar_measurement): Secondary object for subtraction.
+        """
+        #TODO: Expand to 3D case.
+        #TODO: Fix method, use pylectric.signals.processing.trim_matching
+        
+        # Conditions to allow subtraction:
+        assert isinstance(x, hallbar_measurement)
+        subdata = super().__sub__(x)
+        newobj = self.copy()
+        
+        #Assign data to existing variables
+        newobj.field = subdata[:, 0]
+        newobj.rxx = subdata[:,1]
+        newobj.rxy = subdata[:,2]
+        for key, i in zip(self.dataseries.keys(), range(subdata.shape[1] - 3)):
+            newobj.dataseries[key] = subdata[:,3+i]
+            
+        return newobj
+    
+    @override
+    def plot_all_data(self, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
+        tg = super().plot_all_data(axes, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
@@ -153,8 +186,8 @@ class hallbar_measurement(geo_base.graphable_base):
         return tg
 
     @override
-    def plot_dep_vars(self, axes=None, label=None) -> graphwrappers.transport_graph:
-        tg = super().plot_dep_vars(axes, label)
+    def plot_dep_vars(self, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
+        tg = super().plot_dep_vars(axes, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
@@ -169,28 +202,48 @@ class hallbar_measurement(geo_base.graphable_base):
         return np.c_[self.rhoxx, self.rhoxy]
     
     @override
-    def extra_vars(self):
-        return np.c_[*[self.dataseries[key] for key in self.dataseries]]
+    def plot_all_dataseries(self, ax=None, **mpl_kwargs):
+        tg = super().plot_all_dataseries(ax, **mpl_kwargs)
+        tg.xFieldT(i=-1)
+        return tg
+    
+    @override
+    def plot_dataseries(self, key, ax=None, **mpl_kwargs):
+        tg = super().plot_dataseries(key, ax, **mpl_kwargs)
+        tg.xFieldT(i=-1)
+        return tg
+    
+    @override
+    def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
+        tg = super().plot_dataseries_with_dep_vars(key, ax, **mpl_kwargs)
+        tg.xFieldT(i=-1)
+        tg.yResistivity(i=0, subscript="xx")
+        tg.yResistivity(i=1, subscript="xy")
+        return tg
 
-    def plot_MR_percentages(self, axes = None, label=None):
+    def plot_MR_percentages(self, axes=None, **mpl_kwargs):
         #Get zero field location
         minfield = np.min(np.abs(self.field))
         i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
         i = int(np.round(np.average(i))) #average min field value positions if multiple, round to nearest.
         #Prepare zero field substracted data.
-        MR_rxx = self.rhoxx - self.rhoxx[i]
-        MR_rxx /= self.rhoxx[i]
-        MR_rxy = self.rhoxy - self.rhoxy[i]
-        MR_rxy /= self.rhoxy[i]
-        data = np.c_[self.field, MR_rxx, MR_rxy]
+        MR_rhoxx = self.rhoxx.copy()
+        if self.rhoxx[i] == 0:
+            raise Warning("At the minimum field, Rho_xx is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
+        MR_rhoxx /= self.rhoxx[i]
+        MR_rhoxy = self.rhoxy.copy()
+        if self.rhoxy[i] == 0:
+            raise Warning("At the minimum field, Rho_xy is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
+        MR_rhoxy /= self.rhoxy[i]
+        data = np.c_[self.field, MR_rhoxx, MR_rhoxy]
         # Plots!
-        tg = hallbar_measurement._plot_2Ddata(data=data, axes=axes, label=label)
+        tg = hallbar_measurement._plot_2Ddata(data=data, axes=axes, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yMR_percentage(i=0, subscript="xx")
         tg.yMR_percentage(i=1, subscript="xy")
         return tg
     
-    def plot_MR_absolute(self, axes = None, label=None):
+    def plot_MR_absolute(self, axes=None, **mpl_kwargs):
         # Get zero field location
         minfield = np.min(np.abs(self.field))
         i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
@@ -201,23 +254,69 @@ class hallbar_measurement(geo_base.graphable_base):
         MR_rxy = self.rhoxy - self.rhoxy[i]
         data = np.c_[self.field, MR_rxx, MR_rxy]
         # Plots!
-        tg = hallbar_measurement._plot_2Ddata(data, axes=axes, label=label)
+        tg = hallbar_measurement._plot_2Ddata(data, axes=axes, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yMR_absolute(i=0, subscript="xx")
         tg.yMR_absolute(i=1, subscript="xy")
         return tg
     
-
-    def plot_magnetoresistance_p(self, axes=None, label=None):
+    def plot_magnetoresistance_p(self, axes=None, **mpl_kwargs):
         """Alias for plot_MR_percentages"""
-        return self.plot_MR_percentages(axes, label)
-    def plot_magnetoresistance_a(self, axes=None, label=None):
+        return self.plot_MR_percentages(axes, **mpl_kwargs)
+
+    def plot_magnetoresistance_a(self, axes=None, **mpl_kwargs):
         """Alias for plot_MR_absolute"""
-        return self.plot_MR_absolute(axes, label)
+        return self.plot_MR_absolute(axes, **mpl_kwargs)
     
-    def plot_Shubnikov_deHass(self,axes = None, label=None):
-        data = np.c_[1/self.field[::-1], self.rxy[::-1]]
-        tg = self._plot_2Ddata(data, axes=axes, label=label)
+    def plot_Shubnikov_deHass(self, axes=None, **mpl_kwargs):
+        data = np.c_[1/self.field[::-81], self.rxy[::-1]]
+        tg = self._plot_2Ddata(data, axes=axes, **mpl_kwargs)
         tg.xFieldInverseT(i=-1)
         tg.yMR_absolute(i=-1, subscript="xy")
         return
+     
+# class hallbar_measurement_set():
+#     """Class to categorise, organise and graph multiple hallbar measurements"""
+#     # TODO impliment
+    
+#     def __init__(self, hb) -> None:
+#         if isinstance(hb, hallbar_measurement):
+#             self.hbs = [hb]
+#         elif isinstance(hb, list) and np.all([isinstance(a, hallbar_measurement) for a in hb]):
+#             self.hbs = hb
+#         else:
+#             raise AttributeError("hb is not an individual or list of hallbar_measurement objects.")
+        
+#         self.sort_method, self.sort_params = self._defaultSortMethod()
+#         self.sort_accending()
+        
+#         return
+    
+#     def _defaultSortMethod():
+#         default_sort_index = 0
+#         method = list.sort
+#         params = {'key':lambda hb: np.average(hb.dataseries[hb.dataseries.keys()[default_sort_index]]), 'reverse':False}
+#         return method, params
+    
+#     def set_sort_handle(self, method, params):
+#         """Sets the method to apply to a list, to return a sorted list.
+
+#         Args:
+#             method (function): Sorting function to apply to list. Requires 'reverse' keyword option.
+#             params (kwargs): Dictionary of parameters neccessary for the function call.
+#         """
+#         args, varargs, kwargs = inspect.getargs(method)
+#         if 'reverse' not in args:
+#             raise AttributeError("Method does not contain 'reverse' argument.")
+#         self.sort_method = method
+#         self.sort_params = params
+#         return 
+    
+#     def sort_accending():
+        
+#         return
+    
+#     def sort_decending():
+        
+#         return
+    
