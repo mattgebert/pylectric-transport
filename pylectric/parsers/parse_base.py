@@ -19,8 +19,9 @@ class parserFile(metaclass=abc.ABCMeta):
             self.fname = file.name
         else:
             raise IOError("Object passed was not a valid file/filename.")
-
         self.data, self.labels, self.params = self.filereader(filebuffer)
+        if 'filename' not in self.params:
+            self.params['filename'] = self.filename()
         return
 
     @classmethod

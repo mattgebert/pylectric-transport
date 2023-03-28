@@ -112,19 +112,25 @@ def trim_matching_fromsimilar(data1, data2, colN = [0]):
     2. One domain is a subset of the other
     3. Smaller size fits exactly in bigger size."""
     c = len(data1) > len(data2) #condition
-    d1 = data1[:,colN] if c else data2[:,colN]  # d1 always longer list
-    d2 = data2[:,colN] if c else data1[:,colN]  # d2 alway shorter list
-    trim_len = len(d1)-len(d2)
-    for i in range(trim_len):
-        j = trim_len - i
-        s1 = d1[i:len(d1)-j,colN]
-        if np.all(s1 == d2):
-            d1 = data1.copy()[i:, len(d1)-j]
-            d2 = data2.copy()
-            return d1,d2 if c else d2,d1
-    print(data1[:,colN])
-    print(data2[:,colN])
-    raise AttributeError("The two lists do not immediately match by trimming ends to match size.")
+    if len(data1) == len(data2):
+        if np.all(data1[:,colN] == data2[:,colN]):
+            return (data1, data2)
+        else:
+            raise AttributeError("data1 & data2 match size, but not elements.")
+    else:
+        d1 = data1 if c else data2  # d1 always longer list
+        d2 = data2 if c else data1  # d2 alway shorter list
+        trim_len = len(d1)-len(d2)
+        for i in range(trim_len+1):
+            j = trim_len - i
+            s1 = d1[i:len(d1)-j,colN]
+            if np.all(s1 == d2[:,colN]):
+                d1 = d1.copy()[i:len(d1)-j,:]
+                d2 = d2.copy()
+                return (d1,d2) if c else (d2,d1)
+        raise AttributeError("The two lists do not immediately match by trimming ends to match size.")
+        
+        
 
 def symmetric_reduction(data, step, colN=0):
     """Generates same function as 'reduction', but additionally trims the data so that the reduced data is symmetric about the middle of colN.
@@ -182,26 +188,27 @@ def symmetric_reduction(data, step, colN=0):
             new_data_std = new_data_std[:ind, :]
     return x, new_data, new_data_std
 
-def symmetrise(data, colN=0) -> tuple[np.ndarray, np.ndarray]:
+def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarray]:
     """Symmetrises a dataset, retains original values for colN.
     If odd length, assumes symmetry about the midpoint.
     If even length, assumes symmetry between the middle two points.
     
 
     Args:
-        data (NDarray): 2D array, indexed by rows, columns.
-        colN (int, optional): _description_. Defaults to 0.
+        data (NDarray):         2D array, indexed by rows, columns.
+        colN (int, optional):   Data column by which to symmetrise. Defaults to 0.
+        full_domain (bool):     Whether to return the full domain or not. Defaults to False.
 
     Returns:
-        tuple[np.ndarray, np.ndarray]: _description_
+        [sym, asym] (tuple[np.ndarray, np.ndarray]): Returns Symmetric and Asymmetric components of the domain.
     """
     assert isinstance(data, np.ndarray)
-    assert type(colN)==int
+    assert isinstance(colN, int) or (isinstance(colN, (list, np.ndarray)) and np.all([isinstance(a) for a in colN]))
     
     dlen = len(data)
-    is_odd = dlen & 1
+    is_odd = dlen & 1 #bitcheck if odd or even
     if is_odd:
-        dhalf = (dlen - 1) >> 1 
+        dhalf = (dlen - 1) >> 1 #bit reduce by 1 to get half value.
         #Includes mid point:
         sym = (data[dhalf:] + data[dhalf::-1]) / 2
         asym = (data[dhalf:] - data[dhalf::-1]) / 2 
@@ -221,8 +228,11 @@ def symmetrise(data, colN=0) -> tuple[np.ndarray, np.ndarray]:
         
     
     # Restore independent variable
-    full_sym[:, colN] = data[:, colN]  
+    full_sym[:, colN] = data[:, colN]
     full_asym[:, colN] = data[:, colN]
     
-    return full_sym, full_asym
+    if full_domain:
+        return full_sym, full_asym
+    else:
+        return sym, asym
 

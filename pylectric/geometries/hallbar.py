@@ -1,3 +1,5 @@
+# Programming Syntax & annotations #1
+from __future__ import annotations
 # Function Libraries
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,7 +8,7 @@ from scipy import optimize as opt
 import pylectric
 from pylectric.graphing import geo_base, graphwrappers
 from pylectric.analysis import mobility
-# Programming Syntax
+# Programming Syntax & annotations #2
 import warnings
 from overrides import override
 from abc import abstractmethod
@@ -19,7 +21,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         Can provide additional data to add to object, in the form of a dictionary of data {label:numpy_array}.
     """
     
-    def __init__(self, field, rxx, rxy, dataseries = {}, geom = 1, **params):
+    def __init__(self, field, rxx, rxy, dataseries = {}, geom = 1, params = {}):
         # initialise super object
         super().__init__(dataseries=dataseries)
         
@@ -42,9 +44,9 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         
         # Convert rxx, rxy to rhoxx, rhoxy, sigmaxx, sigmaxy
         self._calculateTransport()
-        self.params = params
-        
-        
+        # Copy items in params to self.
+        self.params = {}
+        self.params.update(params)
         return
     
     def _calculateTransport(self):
@@ -55,7 +57,18 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         self.sigmaxy = -self.rhoxy / (self.rhoxx**2 + self.rhoxy**2)
         
     
-    def symmterise(self): # -> tuple[hallbar.hallbar_measurement, hallbar.hallbar_measurement]:
+    def symmterise(self, full_domain=False) -> tuple[hallbar_measurement, hallbar_measurement]:
+        """_summary_
+
+        Args:
+            full_domain (bool, optional): . Defaults to False.
+
+        Raises:
+            AttributeError: Field values not symmetric in data.
+
+        Returns:
+            _type_: _description_
+        """
         #0. Check requirements [datapoints are evenly binned]:
         if not np.alltrue(self.field[:] == -self.field[::-1]):
             raise AttributeError("Field B is not symmetric in field about 0." +
@@ -66,12 +79,10 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         asym_clone = self.copy() #assymmetric
         
         #Put data together into one array.
-        all_data = np.c_[self.field, self.rxx, self.rxy]
-        for key,value in self.dataseries.items():
-            all_data = np.c_[all_data, value]
+        all_data = self.all_vars()
         
         #Symmmetrise all data:
-        sym, asym = pylectric.signals.processing.symmetrise(all_data)
+        sym, asym = pylectric.signals.processing.symmetrise(all_data, colN=0, full_domain=full_domain) #field = 0
         
         #Reassign datasets:
         sym_clone.field = sym[:,0]
@@ -83,10 +94,9 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         asym_clone.rxy = asym[:, 2]
         
         i = 0
-        for key in self.dataseries:
+        for key, i in zip(self.dataseries, range(len(self.dataseries))):
             sym_clone.dataseries[key] = sym[:,3+i]
             asym_clone.dataseries[key] = asym[:,3+i]
-            i += 1
         
         # Recalulate other transport parameters
         sym_clone._calculateTransport()
@@ -160,6 +170,9 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         #TODO: Expand to 3D case.
         #TODO: Fix method, use pylectric.signals.processing.trim_matching
         
+        print(self.params['filename'])
+        print('subtracting!')
+        
         # Conditions to allow subtraction:
         assert isinstance(x, hallbar_measurement)
         subdata = super().__sub__(x)
@@ -171,7 +184,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         newobj.rxy = subdata[:,2]
         for key, i in zip(self.dataseries.keys(), range(subdata.shape[1] - 3)):
             newobj.dataseries[key] = subdata[:,3+i]
-            
+        newobj._calculateTransport()
         return newobj
     
     @override

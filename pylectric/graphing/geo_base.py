@@ -173,9 +173,11 @@ class graphable_base(metaclass=ABCMeta):
             assert A.shape[0] == B.shape[0]
         return
     
+    @abstractmethod
     def plot_all_data(self, axes=None, **mpl_kwargs):
         """Generates a plot of all data attached to object.
         Subplots determined by independent variables (columns) and dependent / extra variables (rows).
+        Requires overriding to label individual plots appropraitely.
 
         """
         vari = self.ind_vars()
@@ -197,10 +199,11 @@ class graphable_base(metaclass=ABCMeta):
             raise AttributeError("Too many independent variables")        
         return tg
 
+    @abstractmethod
     def plot_dep_vars(self, axes=None, **mpl_kwargs):
         """Generates a plot of all data attached to object.
         Subplots determined by independent variables (columns) and dependent / extra variables (rows).
-
+        Requires override to label plots appropriately.
         """
         vari = self.ind_vars()  # 1D array
         vard = self.dep_vars()  # 2D array
@@ -251,20 +254,26 @@ class graphable_base(metaclass=ABCMeta):
                 print("Independent values don't match, truncating data to largest matching independent set to perform subtraction...")
             
             # Axis sizes don't match size ensuring that values match along field.
-            self_match = self.all_vars()
-            x_match = self.all_vars()
+            self_vars = self.all_vars()
+            x_vars = x.all_vars()
 
             # Assuming data in 2D form.
-            print(ind_var_len)
             for i in range(ind_var_len): #for each independent variable (ie, number of columns)
-                self_match, x_match = pylectric.signals.processing.trim_matching_fromsimilar(self_match, x_match, colN=i)  # iterate over data as many times as there are independent variables
+                self_vars, x_vars = pylectric.signals.processing.trim_matching_fromsimilar(self_vars, x_vars, colN=i)  # iterate over data as many times as there are independent variables
+            self_match = self_vars
+            x_match = x_vars
         else:
             self_match = self.all_vars()
             x_match = x.all_vars()
         
-        sub = self_match
-        sub[:, ind_var_len:] - x_match[:, ind_var_len:]
+        #Check independent variables actually match up as intended.
+        print(self_match[:,0])
+        print(x_match[:,0])
+        assert np.all(self_match[:,0:ind_var_len] == x_match[:, 0:ind_var_len])
         
+        #Copy independent variables, subtract all other variables.
+        sub = self_match.copy()
+        sub[:, ind_var_len:] = sub[:, ind_var_len:]  - x_match[:, ind_var_len:]
         return sub
 
 class graphable_base_dataseries(graphable_base):
