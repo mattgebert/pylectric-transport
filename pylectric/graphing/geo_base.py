@@ -7,17 +7,24 @@ import pylectric
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
-
+from enum import Enum
 
 class graphable_base(metaclass=ABCMeta):
     """Class to expand and bind graphing functions to geometric objects.
 
     """
     
+    class sweep_enum(Enum):
+        """Tracks sweeping direction for the class"""
+        UNDEFINED = 0
+        FORWARD = 1
+        BACKWARD = 2
+    
     def __init__(self) -> None:
         # if not hasattr(self, "data"):
             # raise AttributeError("No data passed to constructor.")
         super().__init__()
+        self.sweep_dir = self.sweep_enum.UNDEFINED
         return None
 
     @abstractmethod
@@ -275,6 +282,11 @@ class graphable_base(metaclass=ABCMeta):
         sub = self_match.copy()
         sub[:, ind_var_len:] = sub[:, ind_var_len:]  - x_match[:, ind_var_len:]
         return sub
+
+    def sweep_arrow_location(self, i):
+        if len(self.ind_vars().shape) == 1:
+            #single x variable
+            return pylectric.signals.feature_detection.find_arrow_location(xdata=self.ind_vars(),ydata=self.dep_vars()[:,i])
 
 class graphable_base_dataseries(graphable_base):
     def __init__(self, dataseries = {}) -> None:

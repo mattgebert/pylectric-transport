@@ -521,6 +521,31 @@ class scalable_graph():
                 for handle in lgnd.legendHandles:
                     handle.set_sizes(size)
 
+    def add_sweep_arrow(self, sweep_enum, x,y, i, **kwargs):
+        assert isinstance(sweep_enum)
+        assert isinstance(x, (int, float))
+        assert isinstance(y, (int, float))
+        assert isinstance(i, int)
+        sweep_ref = geo_base.graphable_base.sweep_enum
+        dy=0
+        xlims = self.ax[i].get_xlim()
+        if sweep_enum == sweep_ref.FORWARD:
+            dx = xlims[1]-xlims[0]
+        elif sweep_enum == sweep_ref.BACKWARD:
+            dx = xlims[0]-xlims[1]
+        else:
+            return #do not plot an arrow if undefined.
+        self.ax[i].arrow(x,y,dx,dy, **kwargs)
+
+    def add_sweep_arrows(self, enums, xs, ys, indexes, **kwargs):
+        assert isinstance(enum, (list, np.ndarray))
+        assert isinstance(xs, (list, np.ndarray))
+        assert isinstance(ys, (list, np.ndarray))
+        assert isinstance(indexes, (list, np.ndarray))
+        for enum, x, y, i in zip(enums, xs, ys, indexes):
+            self.add_sweep_arrow(enum, x, y, i, **kwargs)
+        return
+
 class transport_graph(scalable_graph):
     
     use_pylectric_rcparams = False

@@ -234,20 +234,28 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         tg.yResistivity(i=1, subscript="xy")
         return tg
 
-    def plot_MR_percentages(self, axes=None, **mpl_kwargs):
-        #Get zero field location
+    def MR_percentages(self):
+        # Get zero field location
         minfield = np.min(np.abs(self.field))
-        i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
-        i = int(np.round(np.average(i))) #average min field value positions if multiple, round to nearest.
-        #Prepare zero field substracted data.
+        i = np.where(np.abs(self.field) == minfield)[
+            0]  # get min magfield positions
+        # average min field value positions if multiple, round to nearest.
+        i = int(np.round(np.average(i)))
+        # Prepare zero field substracted data.
         MR_rhoxx = self.rhoxx.copy()
         if self.rhoxx[i] == 0:
-            raise Warning("At the minimum field, Rho_xx is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
+            raise Warning(
+                "At the minimum field, Rho_xx is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
         MR_rhoxx /= self.rhoxx[i]
         MR_rhoxy = self.rhoxy.copy()
         if self.rhoxy[i] == 0:
-            raise Warning("At the minimum field, Rho_xy is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
+            raise Warning(
+                "At the minimum field, Rho_xy is zero valued, giving infinite MR %. Use hallbar.plot_MR_absolute instead.")
         MR_rhoxy /= self.rhoxy[i]
+        return MR_rhoxx, MR_rhoxy
+
+    def plot_MR_percentages(self, axes=None, **mpl_kwargs):
+        MR_rhoxx, MR_rhoxy = self.MR_percentages()
         data = np.c_[self.field, MR_rhoxx, MR_rhoxy]
         # Plots!
         tg = hallbar_measurement._plot_2Ddata(data=data, axes=axes, **mpl_kwargs)
@@ -256,16 +264,21 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         tg.yMR_percentage(i=1, subscript="xy")
         return tg
     
-    def plot_MR_absolute(self, axes=None, **mpl_kwargs):
+    def MR_absolute(self):
         # Get zero field location
         minfield = np.min(np.abs(self.field))
-        i = np.where(np.abs(self.field) == minfield)[0]  # get min magfield positions
+        i = np.where(np.abs(self.field) == minfield)[
+            0]  # get min magfield positions
         # average min field value positions if multiple, round to nearest.
         i = int(np.round(np.average(i)))
         # Prepare zero field substracted data.
-        MR_rxx = self.rhoxx - self.rhoxx[i]
-        MR_rxy = self.rhoxy - self.rhoxy[i]
-        data = np.c_[self.field, MR_rxx, MR_rxy]
+        MR_rhoxx = self.rhoxx - self.rhoxx[i]
+        MR_rhoxy = self.rhoxy - self.rhoxy[i]
+        return MR_rhoxx, MR_rhoxy
+    
+    def plot_MR_absolute(self, axes=None, **mpl_kwargs):
+        MR_rhoxx, MR_rhoxy = self.MR_absolute()
+        data = np.c_[self.field, MR_rhoxx, MR_rhoxy]
         # Plots!
         tg = hallbar_measurement._plot_2Ddata(data, axes=axes, **mpl_kwargs)
         tg.xFieldT(i=-1)

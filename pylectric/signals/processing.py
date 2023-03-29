@@ -230,6 +230,8 @@ def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarra
     # Restore independent variable
     full_sym[:, colN] = data[:, colN]
     full_asym[:, colN] = data[:, colN]
+    sym[:, colN] = data[dhalf:, colN]
+    asym[:, colN] = data[dhalf:, colN]
     
     if full_domain:
         return full_sym, full_asym
