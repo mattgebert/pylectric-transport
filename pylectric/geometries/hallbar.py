@@ -170,9 +170,6 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         #TODO: Expand to 3D case.
         #TODO: Fix method, use pylectric.signals.processing.trim_matching
         
-        print(self.params['filename'])
-        print('subtracting!')
-        
         # Conditions to allow subtraction:
         assert isinstance(x, hallbar_measurement)
         subdata = super().__sub__(x)
@@ -222,13 +219,13 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
     
     @override
     def plot_dataseries(self, key, ax=None, **mpl_kwargs):
-        tg = super().plot_dataseries(key, ax, **mpl_kwargs)
+        tg = super().plot_dataseries(key=key, ax=ax, **mpl_kwargs)
         tg.xFieldT(i=-1)
         return tg
     
     @override
     def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
-        tg = super().plot_dataseries_with_dep_vars(key, ax, **mpl_kwargs)
+        tg = super().plot_dataseries_with_dep_vars(key=key, ax=ax, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")

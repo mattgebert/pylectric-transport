@@ -26,22 +26,45 @@ def peak_arrow_location(xdata,ydata, direction ,peak_n=0, window_percent=5.0):
         signchange = (np.roll(sign,1) - sign != 0) & (np.logical_not(np.isnan(sign))) & (np.logical_not(np.isnan(np.roll(sign,1))))  #true if change in sign
         locs = np.where(signchange == True)[0] #indexes of changes in sign
         
-            
-        #4 use gradient point that corresponds to largest peak.
+        #4 Check if no peak match, then return near max value
         yabs = np.abs(ysmooth) #abs to find max height
+        yabs = yabs[np.logical_not(np.isnan(yabs))]
+        if len(locs) == 0:
+            print("Peak not found, instead using value near maximum and 5% away from endpoint.")
+            i = np.where(yabs == np.max(yabs))[0]
+            upperbound = 0.9 * xrange + np.min(xdata)
+            lowerbound = 0.1 * xrange + np.min(xdata)
+            if xsmooth[i] >= upperbound:
+                x = 0.9 * xrange + np.min(xdata)
+            elif xsmooth[i] <= lowerbound:
+                x = 0.1 * xrange + xsmooth[i]
+            else:
+                x = xsmooth[i]
+            i = np.where(np.min(xsmooth - x) == xsmooth-x)[0][0]
+            yoffset = abs(0.1*yrange)
+            y = ysmooth[i]
+            y += (yoffset if y > 0 else -yoffset) #create offset to seperate from data.
+            dy = 0
+            if direction is graphable_base.sweep_enum.FORWARD:
+                dx = xrange * 0.025  # 2.5% of x
+            elif direction is graphable_base.sweep_enum.BACKWARD:
+                dx = -xrange * 0.025  # 2.5% of x
+            return x, y, dx, dy
+                
+        #5 use gradient point that corresponds to largest peak.
         peaks = yabs[locs] #yabs values at changes in sign
         
-        #5 sort peaks from largest to smallest.
+        #6 sort peaks from largest to smallest.
         inds = np.argsort(peaks)[::-1] #get indicies from sorting peaks, and reverse to make largest at the front.
         sorted_locs = locs[inds] #sorted locations from largest peak to smallest
         sorted_locs = sorted_locs[np.logical_not(np.isnan(sorted_locs))] #Remove any locations that are NaN.
         
-        #6 Select peak
+        #7 Select peak
         if peak_n > len(sorted_locs):
             raise AttributeError("Identified peak number (" + str(len(sorted_locs)) + ") is smaller than peak_n (" + str(peak_n) + ").",)
         select_loc = sorted_locs[peak_n]
         
-        #6 package to return
+        #8 package to return
         if direction is graphable_base.sweep_enum.FORWARD:
             arrow_dx = xrange * 0.025  # 2.5% of x
         elif direction is graphable_base.sweep_enum.BACKWARD:

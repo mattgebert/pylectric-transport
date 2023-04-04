@@ -13,7 +13,7 @@ from abc import abstractmethod
 from enum import Enum
 
     
-class fourprobe_measurement(geo_base.graphable_base):
+class fourprobe_measurement(geo_base.graphable_base_dataseries):
     """ Class for a 4-probe (aka. kelvin probe, four-terminal sensing) measurement.
         This class is specific for the source dependence (Current, Frequency, Gate) on the Rxx of a device.
         In particular, this class is useful for testing the validity of a device in performance limits, such as heating, reactance and leakage.
@@ -22,11 +22,34 @@ class fourprobe_measurement(geo_base.graphable_base):
     
     class iv_types(Enum):
         """Enumerate object to source specify independent variable category"""
-        CURRENT = 0
-        GATE = 1
-        FREQUENCY = 2
+        UNDEFINED = 0
+        CURRENT = 1
+        GATE = 2
+        FREQUENCY = 3
+        
+        @classmethod
+        def match_str_to_enum(cls, str):
+            """Checks the contents of a string and checks if it matches one of the category types.
+            Otherwise returns UNDEFINED.
 
-    def __init__(self, src, rxx, src_type, src_label="", dataseries={}, geom=1, **params):
+            Args:
+                str (string): String to check for pre-defined label.
+
+            Returns:
+                _type_: _description_
+            """
+            str = str.lower().replace("(","").replace(")","").split(" ")
+            for part in str:
+                if part in ["current", "cur", "i", "a"]:
+                    return cls.CURRENT
+                elif part in ["freq", "frequency", "hz", "f"]:
+                    return cls.FREQUENCY
+                elif part in ["v_g","v$_g$","$v_g$","gate","v"]:
+                    return cls.GATE
+            return cls.UNDEFINED
+
+            
+    def __init__(self, src, rxx, src_type, src_label="", dataseries={}, geom=1, params={}):
         """One of (Current, Frequency, Gate) need to be included as 'source'."""
         
         # Valid Datachecking:
@@ -44,7 +67,7 @@ class fourprobe_measurement(geo_base.graphable_base):
                 raise IndexError("Length of data arrays do not match.")
 
         # Label identification
-        assert src_type is self.iv_types
+        assert src_type in self.iv_types
         self.src_type = src_type
         self.src_label = src_label
                 
@@ -53,16 +76,11 @@ class fourprobe_measurement(geo_base.graphable_base):
         self.rxx = rxx.copy()
         self.geom = geom
         self.params = params
-        self.dataseries = {}
-        for key,val in dataseries.items():
-            self.dataseries[key] = val.copy()
-
         # Convert rxx,rhoxx
         self._calculateTransport()
 
         # initialise super object
-        super().__init__()
-        
+        super().__init__(dataseries=dataseries)
         return
     
     @classmethod
@@ -100,20 +118,21 @@ class fourprobe_measurement(geo_base.graphable_base):
         return
 
     def copy(self):
-        newobj = fourprobe_measurement(rxx=self.rxx,  src=self.src, src_type=self.src_type, src_label=self.src_label, dataseries={}, geom=self.geom)
+        newobj = fourprobe_measurement(rxx=self.rxx.copy(),  src=self.src.copy(), src_type=self.src_type, src_label=self.src_label, dataseries={}, geom=self.geom)
         # dataseries items
+        newobj.dataseries = {}
         for key,val in self.dataseries.items():
             newobj.dataseries[key] = val.copy()
         # params items
         newobj.params = {}
         for key,val in self.params.items():
             newobj.params[key] = val
-        return
+        return newobj
 
     def __add__(self,x):
         assert isinstance(x, fourprobe_measurement)
         #check if type matchups.
-        if self.src_type == x.src_type:
+        if not self.src_type == x.src_type:
             raise AttributeError("Measurement types do not match (" + str(self.src_type) + ", " + str(x.src_type) + ")")
         #Else:
         newobj = self.copy()
@@ -133,8 +152,39 @@ class fourprobe_measurement(geo_base.graphable_base):
         return newobj
 
     @override
-    def plot_all_data(self, axes=None, label=None):
-        tg = super().plot_all_data(axes, label)
-        return
+    def plot_all_data(self, axes=None, **mpl_kwargs):
+        tg = super().plot_all_data(axes, mpl_kwargs)
+        return tg
 
+    @override
+    def plot_all_dataseries(self, ax=None, **mpl_kwargs):
+        tg = super().plot_all_dataseries(ax, **mpl_kwargs)
+        return tg
     
+    @override
+    def plot_dataseries(self, key, ax=None, **mpl_kwargs):
+        tg = super().plot_dataseries(key, ax, **mpl_kwargs)
+        return tg
+    
+    @override
+    def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
+        tg = super().plot_dataseries_with_dep_vars(key, ax, **mpl_kwargs)
+        return tg
+    
+    @override
+    def plot_dep_vars(self, axes=None, **mpl_kwargs):
+        tg = super().plot_dep_vars(self, axes, **mpl_kwargs)
+        return tg
+        
+    
+    @override
+    def __sub__(self, x):
+        subdata = super().__sub__(x)
+        newobj = self.copy()
+        
+        self.src = newobj[:, 0]
+        self.rxx = newobj[:, 1]
+        for key, i in zip(self.dataseries.keys(), range(subdata.shape[1] - 2)):
+            newobj.dataseries[key] = subdata[:, 2+i]
+        
+        return 

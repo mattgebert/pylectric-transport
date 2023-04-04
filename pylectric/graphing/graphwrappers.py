@@ -51,6 +51,7 @@ class scalable_graph():
         if not (isinstance(axfig, list) or isinstance(axfig, np.ndarray)):
             axfig = [axfig,]
 
+        self.thousands = True #dictates whether the autoscale axes display units of tens and hundreds, not just thousands.
         self.fig = None
         self.ax = []
         self.scale = []  # Multiplicative factor for axes.
@@ -118,6 +119,12 @@ class scalable_graph():
 
             xo = np.floor(np.log10(np.max(np.abs(xlim))))
             yo = np.floor(np.log10(np.max(np.abs(ylim))))
+
+            if self.thousands:
+                if xo not in self._exponent_to_prefix:
+                    xo -= (xo % 3)
+                if yo not in self._exponent_to_prefix:
+                    yo -= (yo % 3)
 
             # Scale the tick labels
             if xo > 2 or xo < -2:
@@ -298,8 +305,9 @@ class scalable_graph():
         # If natural units are being used, do not consider the existing axes units, but keep label!
         if self.natlabel[i][j] != None and self.natscale[i][j] != 1:
             # Use natural labels.
-            newlabel = pre+"(" + self._genFactorLabel(geom,
-                                                      exp)+" "+self.natlabel[i][j]+")"
+            gen = self._genFactorLabel(geom,exp)
+            gen += " " if gen != "" else ""
+            newlabel = pre+"("+gen+self.natlabel[i][j]+")"
 
         # Check if units have some non-zero string, so they can use prefixes.
         elif len(units) > 0:
@@ -380,7 +388,10 @@ class scalable_graph():
         exp_rem = exp % 3
         exp_3s = exp - exp_rem
         if exp_3s in transport_graph._exponent_to_prefix.keys():
-            return transport_graph._genFactorLabel(geom, exp_rem) + " " + transport_graph._exponent_to_prefix[exp_3s]
+            fac = transport_graph._genFactorLabel(geom, exp_rem)
+            pref = transport_graph._exponent_to_prefix[exp_3s]
+            ret = fac + " " + pref if fac != "" else pref
+            return ret
         elif exp_3s == 0:
             label = transport_graph._genFactorLabel(geom, exp_rem)
             return label + " " if label != "" else ""  # don't return space...
@@ -664,7 +675,7 @@ class transport_graph(scalable_graph):
         self._updateY_Ticks_Labels(i)
     
     def yMR_absolute(self, i=None, order=0, subscript=""):
-        label = r"MR$_{" + subscript + r"}$ [$\rho - \rho_{B=0}$] ($\Omega$)"
+        label = r"$\Delta$MR$_{" + subscript + r"}$ [$\rho - \rho_{B=0}$] ($\Omega$)"
         self._apply_fn_to_axes(plt.Axes.set_ylabel, i, *[label])
         self._updateY_Ticks_Labels(i)
 

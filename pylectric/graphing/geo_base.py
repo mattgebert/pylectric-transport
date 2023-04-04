@@ -289,7 +289,7 @@ class graphable_base(metaclass=ABCMeta):
             return pylectric.signals.feature_detection.find_arrow_location(xdata=self.ind_vars(),ydata=self.dep_vars()[:,i])
 
 class graphable_base_dataseries(graphable_base):
-    def __init__(self, dataseries = {}) -> None:
+    def __init__(self, dataseries) -> None:
         self.dataseries = {}
         for key, value in dataseries.items():
             assert isinstance(value, np.ndarray)
@@ -331,7 +331,7 @@ class graphable_base_dataseries(graphable_base):
         data = np.c_[vari, vard, vare]
         tg = graphable_base._plot_2Ddata(data, ax, **mpl_kwargs)
         i = vard.shape[-1]
-        tg.ax[i].set_ylabel(list(self.dataseries)[i])
+        tg.ax[i].set_ylabel(key)
         return tg
 
     @abstractmethod
