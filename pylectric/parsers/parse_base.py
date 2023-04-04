@@ -143,19 +143,29 @@ class parserFile(metaclass=abc.ABCMeta):
         self.data, self.labels = fn(self.data, self.labels, *args)
         return
 
+    def _updateLabels(self, labels, lookup, replacement):
+        updated = False
+        for label in labels:
+            if label in self.labels:
+                for i in range(len(self.labels)):
+                    if self.labels[i] == label:
+                        self.labels[i] = label.replace(lookup, replacement)
+                        if not updated and label != self.labels[i]:
+                            updated = True
+            else:
+                raise IndexError(str(label) + " is not found in parser data labels.")
+        if updated:
+            print("Updated data labels to match units change.")
+            
+
     def v2r_cc(self, current, labels=[], updated_labels = False):
         """Converts a voltage to resistance, by knowing the constant current amount. Returns updated label."""
         args = [current]
         self._applyToLabelledData(
             conversion.voltageProbes.V2R_ConstCurrent, labels, *args)
         
-        # Generate updated label?
-        if updated_labels:
-            new_labels = []
-            for label in labels:
-                new_labels.append(label.replace("(V)","(Ohms)"))
-            # Return new labels.
-            return new_labels
+        # Generate updated label
+        self._updateLabels(labels, "(V)", "(Ohms)")
 
     def v2r_vc(self, v_source, r_series, labels=[]):
         """Converts a measured voltage to resistance, by knowing the voltage source and the series resistance to the measurement.
@@ -164,16 +174,20 @@ class parserFile(metaclass=abc.ABCMeta):
         args = [v_source, r_series]
         self._applyToLabelledData(
             conversion.voltageProbes.V2R_VarCurrent, labels, *args)
+        self._updateLabels(labels, "(V)","(Ohms)")
         
     def v2c(self, circuit_res, labels=[]):
         args = [circuit_res]
         self._applyToLabelledData(
             conversion.voltageProbes.V2R_ConstCurrent, labels, *args)
+        self._updateLabels(labels, "(V)", "(A)")
+        
     
     def c2v(self, circuit_res, labels=[]):
         args = [circuit_res]
         self._applyToLabelledData(
             conversion.voltageProbes.V2R_ConstCurrent, labels, *args)
+        self._updateLabels(labels, "(A)", "(V)")
 
     def remove_gain(self, gain, labels=[]):
         """Removes a factor of gain to the listed labels."""
