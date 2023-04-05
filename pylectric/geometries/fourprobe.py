@@ -24,7 +24,7 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
         """Enumerate object to source specify independent variable category"""
         UNDEFINED = 0
         CURRENT = 1
-        GATE = 2
+        VOLTAGE = 2
         FREQUENCY = 3
         
         @classmethod
@@ -44,13 +44,22 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
                     return cls.CURRENT
                 elif part in ["freq", "frequency", "hz", "f"]:
                     return cls.FREQUENCY
-                elif part in ["v_g","v$_g$","$v_g$","gate","v"]:
-                    return cls.GATE
+                elif part in ["v_g","v$_g$","$v_g$","gate","v","voltage"]:
+                    return cls.VOLTAGE
             return cls.UNDEFINED
 
+    iv_labels = {
+        iv_types.CURRENT:"Current (A)",
+        iv_types.VOLTAGE:"Voltage (V)",
+        iv_types.FREQUENCY:"Frequency (Hz)",
+        iv_types.UNDEFINED:None
+    }
             
     def __init__(self, src, rxx, src_type, src_label="", dataseries={}, geom=1, params={}):
         """One of (Current, Frequency, Gate) need to be included as 'source'."""
+        
+        # Setup axes plotting default as logarithmic.
+        self.set_logarithmic()
         
         # Valid Datachecking:
         datalen = None  # ensure datalength is constant.
@@ -83,16 +92,22 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
         super().__init__(dataseries=dataseries)
         return
     
+    def set_logarithmic(self):
+        self.graphing_scale = "log"  # matches matplotlib yscale arguments.
+    
+    def set_linear(self):
+        self.graphing_scale = "linear" #matches matplotlib yscale arguments.
+    
     @classmethod
-    def fromcurrent(cls, current, rxx, dataseries={}, geom=1, current_label="Current (A)"):
+    def fromcurrent(cls, current, rxx, dataseries={}, geom=1, current_label=iv_labels[iv_types.CURRENT]):
         return cls(src=current, rxx=rxx, src_type=cls.iv_types.CURRENT, dataseries=dataseries, geom=geom, src_label=current_label)
 
     @classmethod
-    def fromgate(cls, gate_v, rxx, dataseries={}, geom=1, gate_label="Gate voltage (V)"):
+    def fromvoltage(cls, gate_v, rxx, dataseries={}, geom=1, gate_label=iv_labels[iv_types.VOLTAGE]):
         return cls(src=gate_v, rxx=rxx, src_type=cls.iv_types.GATE, dataseries=dataseries, geom=geom, src_label=gate_label)
     
     @classmethod
-    def fromfreq(cls, freq, rxx, dataseries={}, geom=1, freq_label="Frequency (Hz)"):
+    def fromfreq(cls, freq, rxx, dataseries={}, geom=1, freq_label=iv_labels[iv_types.FREQUENCY]):
         return cls(src=freq, rxx=rxx, src_type=cls.iv_types.FREQUENCY, dataseries=dataseries, geom=geom, src_label=freq_label)
 
     @override
@@ -151,29 +166,37 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
             print("Objects combined with " + str(paramoverlaps) + " param overlaps ignored from second item.")
         return newobj
 
+    def _update_mpl_kwargs_xscale(self,**mpl_kwargs):
+        return mpl_kwargs
+
     @override
     def plot_all_data(self, axes=None, **mpl_kwargs):
+        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
         tg = super().plot_all_data(axes, mpl_kwargs)
         return tg
 
     @override
     def plot_all_dataseries(self, ax=None, **mpl_kwargs):
+        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
         tg = super().plot_all_dataseries(ax, **mpl_kwargs)
         return tg
     
     @override
     def plot_dataseries(self, key, ax=None, **mpl_kwargs):
+        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
         tg = super().plot_dataseries(key, ax, **mpl_kwargs)
         return tg
     
     @override
     def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
+        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
         tg = super().plot_dataseries_with_dep_vars(key, ax, **mpl_kwargs)
         return tg
     
     @override
     def plot_dep_vars(self, axes=None, **mpl_kwargs):
-        tg = super().plot_dep_vars(self, axes, **mpl_kwargs)
+        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
+        tg = super().plot_dep_vars(axes, **mpl_kwargs)
         return tg
         
     

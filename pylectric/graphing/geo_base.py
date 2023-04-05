@@ -112,8 +112,7 @@ class graphable_base(metaclass=ABCMeta):
         
         # Requirements for axes object
         if axes is not None: #TODO: make this possible for axes arrays to be included from matplotlib.subplots [or isinstance(array)]
-            assert isinstance(axes, plt.Axes) or (
-                (isinstance(axes, list) or isinstance(axes, tuple)) and np.all([isinstance(ax, plt.Axes) for ax in axes]))
+            assert isinstance(axes, plt.Axes) or (isinstance(axes, (list, tuple)) and np.all([isinstance(ax, plt.Axes) for ax in axes]))
         # Requirements for Data
         assert isinstance(data, np.ndarray) 
         assert len(data.shape) == 2
@@ -125,13 +124,14 @@ class graphable_base(metaclass=ABCMeta):
             # Graphing wrapper
             tg = graphwrappers.transport_graph(axes)
             fig.set_size_inches(
-                w=journals.acsNanoLetters.maxwidth_2col, h=3*nd)
+                w=journals.acsNanoLetters.maxwidth_2col, h=3*nd) #3 inches times number of plots.
         elif len(axes) != nd:
             raise AttributeError("Length of axes does not match data dimension.")
         else:
             tg = graphwrappers.transport_graph(axes)
             
         tg.defaults()
+        axes = tg.ax
         
         for i in range(1, nd+1):
             axes[i-1].scatter(data[:,0], data[:,i], **mpl_kwargs)
