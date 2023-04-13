@@ -48,7 +48,7 @@ class scalable_graph():
         Args:
             axfig (List of Axes | Single Figure): Multiple Matplotlib Axes objects or a single Matplotlib Figure.
         """
-        if not (isinstance(axfig, list) or isinstance(axfig, np.ndarray)):
+        if not (isinstance(axfig, (list,tuple)) or isinstance(axfig, np.ndarray)):
             axfig = [axfig,]
 
         self.thousands = True #dictates whether the autoscale axes display units of tens and hundreds, not just thousands.
@@ -58,6 +58,7 @@ class scalable_graph():
         self.natscale = []  # Multiplicitive factor for natural units in axes.
         self.natlabel = []  # Label for natural units.
         self.prevlabel = []  # Labels prior to changing to natural units.
+        self.scale_type = [] # Tracks scaling type (log, linear) to determine whether to scale values or not. Will not scale if using logarithms.
         for obj in axfig:
             if isinstance(obj, plt.Axes):
                 self.ax.append(obj)
@@ -66,6 +67,7 @@ class scalable_graph():
                 self.natscale.append([1, 1])
                 self.natlabel.append([None, None])
                 self.prevlabel.append([None, None])
+                self.scale_type.append([obj.get_xscale(), obj.get_yscale()])
                 if self.fig is None:
                     self.fig = obj.get_figure()
                 else:

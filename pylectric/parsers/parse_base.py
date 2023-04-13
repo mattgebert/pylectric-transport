@@ -158,7 +158,7 @@ class parserFile(metaclass=abc.ABCMeta):
             print("Updated data labels to match units change.")
             
 
-    def v2r_cc(self, current, labels=[], updated_labels = False):
+    def v2r_cc(self, current, labels, updated_labels = False):
         """Converts a voltage to resistance, by knowing the constant current amount. Returns updated label."""
         args = [current]
         self._applyToLabelledData(
@@ -167,7 +167,7 @@ class parserFile(metaclass=abc.ABCMeta):
         # Generate updated label
         self._updateLabels(labels, "(V)", "(Ohms)")
 
-    def v2r_vc(self, v_source, r_series, labels=[]):
+    def v2r_vc(self, v_source, r_series, labels):
         """Converts a measured voltage to resistance, by knowing the voltage source and the series resistance to the measurement.
         Can use a single value or array of values for v_source.
         """
@@ -176,20 +176,20 @@ class parserFile(metaclass=abc.ABCMeta):
             conversion.voltageProbes.V2R_VarCurrent, labels, *args)
         self._updateLabels(labels, "(V)","(Ohms)")
         
-    def v2c(self, circuit_res, labels=[]):
+    def v2c(self, circuit_res, labels):
         args = [circuit_res]
         self._applyToLabelledData(
-            conversion.voltageProbes.V2R_ConstCurrent, labels, *args)
+            conversion.source.V2C, labels, *args)
         self._updateLabels(labels, "(V)", "(A)")
         
     
-    def c2v(self, circuit_res, labels=[]):
+    def c2v(self, circuit_res, labels):
         args = [circuit_res]
         self._applyToLabelledData(
-            conversion.voltageProbes.V2R_ConstCurrent, labels, *args)
+            conversion.source.C2V, labels, *args)
         self._updateLabels(labels, "(A)", "(V)")
 
-    def remove_gain(self, gain, labels=[]):
+    def remove_gain(self, gain, labels):
         """Removes a factor of gain to the listed labels."""
         args = [gain]
         self._applyToLabelledData(conversion.preamplifier.removeConstGain, labels, *args)

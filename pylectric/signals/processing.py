@@ -238,3 +238,23 @@ def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarra
     else:
         return sym, asym
 
+
+def normalise(data, colN = None) -> np.ndarray:
+    """Normalizes each column specified in colN by its maximum absolute value.
+
+    Args:
+        data (np.ndarray): Input data array
+        colN (list, optional): Columns by which to normalize. Defaults to None, implying all columns.
+
+    Returns:
+        np.ndarray: Normalized data array.
+    """
+    
+    if not colN:
+        imax = np.max(np.abs(data), axis=0) # 2D slice of maximum values along each var.
+        norm = data / imax
+    else:
+        imax = np.max(np.abs(data[:,colN]), axis=0) #2D slice of maximum values along each var.
+        norm = data[:, colN] / imax
+    
+    return norm

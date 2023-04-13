@@ -185,19 +185,18 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         return newobj
     
     @override
-    def plot_all_data(self, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
-        tg = super().plot_all_data(axes, **mpl_kwargs)
+    def plot_all_data(self, axes=None, scatter=False, ** mpl_kwargs) -> graphwrappers.transport_graph:
+        tg = super().plot_all_data(axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
-        keys = list(self.dataseries) #indexing - not efficient for many data series, but okay for a small ammount (<10,000)
-        for i in range(2, 2 + len(self.dataseries)):
-            tg.ax[i].set_ylabel(keys[i-2])
+        # for i, key in zip(range(len(self.dataseries)), self.dataseries):
+        #     tg.ax[2+i].set_ylabel(key)
         return tg
 
     @override
-    def plot_dep_vars(self, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
-        tg = super().plot_dep_vars(axes, **mpl_kwargs)
+    def plot_dep_vars(self, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
+        tg = super().plot_dep_vars(axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
@@ -212,20 +211,20 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         return np.c_[self.rhoxx, self.rhoxy]
     
     @override
-    def plot_all_dataseries(self, ax=None, **mpl_kwargs):
-        tg = super().plot_all_dataseries(ax, **mpl_kwargs)
+    def plot_all_dataseries(self, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_all_dataseries(ax, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         return tg
     
     @override
-    def plot_dataseries(self, key, ax=None, **mpl_kwargs):
-        tg = super().plot_dataseries(key=key, ax=ax, **mpl_kwargs)
+    def plot_dataseries(self, key, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_dataseries(key, ax, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         return tg
     
     @override
-    def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
-        tg = super().plot_dataseries_with_dep_vars(key=key, ax=ax, **mpl_kwargs)
+    def plot_dataseries_with_dep_vars(self, key, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_dataseries_with_dep_vars(key, ax, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
@@ -251,11 +250,11 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         MR_rhoxy /= self.rhoxy[i]
         return MR_rhoxx, MR_rhoxy
 
-    def plot_MR_percentages(self, axes=None, **mpl_kwargs):
+    def plot_MR_percentages(self, axes=None, scatter=False, **mpl_kwargs):
         MR_rhoxx, MR_rhoxy = self.MR_percentages()
         data = np.c_[self.field, MR_rhoxx, MR_rhoxy]
         # Plots!
-        tg = hallbar_measurement._plot_2Ddata(data=data, axes=axes, **mpl_kwargs)
+        tg = hallbar_measurement._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yMR_percentage(i=0, subscript="xx")
         tg.yMR_percentage(i=1, subscript="xy")
@@ -273,27 +272,27 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         MR_rhoxy = self.rhoxy - self.rhoxy[i]
         return MR_rhoxx, MR_rhoxy
     
-    def plot_MR_absolute(self, axes=None, **mpl_kwargs):
+    def plot_MR_absolute(self, axes=None, scatter=False, **mpl_kwargs):
         MR_rhoxx, MR_rhoxy = self.MR_absolute()
         data = np.c_[self.field, MR_rhoxx, MR_rhoxy]
         # Plots!
-        tg = hallbar_measurement._plot_2Ddata(data, axes=axes, **mpl_kwargs)
+        tg = hallbar_measurement._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yMR_absolute(i=0, subscript="xx")
         tg.yMR_absolute(i=1, subscript="xy")
         return tg
     
-    def plot_magnetoresistance_p(self, axes=None, **mpl_kwargs):
+    def plot_magnetoresistance_p(self, axes=None, scatter=False, **mpl_kwargs):
         """Alias for plot_MR_percentages"""
-        return self.plot_MR_percentages(axes, **mpl_kwargs)
+        return self.plot_MR_percentages(axes, scatter, **mpl_kwargs)
 
-    def plot_magnetoresistance_a(self, axes=None, **mpl_kwargs):
+    def plot_magnetoresistance_a(self, axes=None, scatter=False, **mpl_kwargs):
         """Alias for plot_MR_absolute"""
-        return self.plot_MR_absolute(axes, **mpl_kwargs)
+        return self.plot_MR_absolute(axes, scatter, **mpl_kwargs)
     
-    def plot_Shubnikov_deHass(self, axes=None, **mpl_kwargs):
+    def plot_Shubnikov_deHass(self, axes=None, scatter=False, **mpl_kwargs):
         data = np.c_[1/self.field[::-81], self.rxy[::-1]]
-        tg = self._plot_2Ddata(data, axes=axes, **mpl_kwargs)
+        tg = self._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         tg.xFieldInverseT(i=-1)
         tg.yMR_absolute(i=-1, subscript="xy")
         return

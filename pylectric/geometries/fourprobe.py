@@ -122,7 +122,7 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
 
     @override
     def dep_vars(self):
-        return self.rxx
+        return self.rhoxx
     
     @override
     def extra_vars(self):
@@ -155,7 +155,7 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
         newobj.rxx = np.r_[newobj.rxx, x.rxx]
         newobj.rhoxx = np.r_[newobj.rhoxx, x.rhoxx]
         for key,val in newobj.dataseries.items():
-            newobj.dataseries[key] = np.c_[val, x.dataseries[key]]
+            newobj.dataseries[key] = np.r_[val, x.dataseries[key]]
         paramoverlaps = 0
         for key,val in x.params.items():
             if not key in newobj.params.keys():
@@ -166,39 +166,61 @@ class fourprobe_measurement(geo_base.graphable_base_dataseries):
             print("Objects combined with " + str(paramoverlaps) + " param overlaps ignored from second item.")
         return newobj
 
-    def _update_mpl_kwargs_xscale(self,**mpl_kwargs):
-        return mpl_kwargs
+    def _update_tg_xscale(self, tg_object):
+        assert isinstance(tg_object, graphwrappers.transport_graph)
+        for ax in tg_object.ax:
+            ax.set_xscale(self.graphing_scale)
+            
+    def _update_tg_yscale(self, tg_object):
+        assert isinstance(tg_object,  graphwrappers.transport_graph)
+        for ax in tg_object.ax:
+            ax.set_yscale(self.graphing_scale)
+
+    def _iv_label(self):
+        return self.iv_labels[self.src_type]
+    
+    def set_xlabel(self, tg_object):
+        assert isinstance(tg_object, graphwrappers.transport_graph)
+        for ax in tg_object.ax:
+            ax.set_xlabel(self._iv_label())
 
     @override
-    def plot_all_data(self, axes=None, **mpl_kwargs):
-        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
-        tg = super().plot_all_data(axes, mpl_kwargs)
+    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_all_data(axes, scatter, mpl_kwargs)
+        self._update_tg_xscale(tg)
+        self.set_xlabel(tg)
+        tg.yResistivity(i=0, subscript="xx")
         return tg
 
     @override
-    def plot_all_dataseries(self, ax=None, **mpl_kwargs):
-        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
-        tg = super().plot_all_dataseries(ax, **mpl_kwargs)
+    def plot_all_dataseries(self, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_all_dataseries(ax, scatter, **mpl_kwargs)
+        self._update_tg_xscale(tg)
+        self.set_xlabel(tg)
         return tg
     
     @override
-    def plot_dataseries(self, key, ax=None, **mpl_kwargs):
-        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
-        tg = super().plot_dataseries(key, ax, **mpl_kwargs)
+    def plot_dataseries(self, key, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_dataseries(key, ax, scatter, **mpl_kwargs)
+        self._update_tg_xscale(tg)
+        self.set_xlabel(tg)
         return tg
     
     @override
-    def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
-        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
-        tg = super().plot_dataseries_with_dep_vars(key, ax, **mpl_kwargs)
+    def plot_dataseries_with_dep_vars(self, key, ax=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_dataseries_with_dep_vars(key, ax, scatter, **mpl_kwargs)
+        self._update_tg_xscale(tg)
+        self.set_xlabel(tg)
+        tg.yResistivity(i=0, subscript="xx")
         return tg
     
     @override
-    def plot_dep_vars(self, axes=None, **mpl_kwargs):
-        mpl_kwargs = self._update_mpl_kwargs_xscale(**mpl_kwargs)
-        tg = super().plot_dep_vars(axes, **mpl_kwargs)
+    def plot_dep_vars(self, axes=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_dep_vars(axes, scatter, **mpl_kwargs)
+        self._update_tg_xscale(tg)
+        self.set_xlabel(tg)
+        tg.yResistivity(i=0, subscript="xx")
         return tg
-        
     
     @override
     def __sub__(self, x):

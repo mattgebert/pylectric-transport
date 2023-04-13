@@ -61,6 +61,24 @@ class graphable_base(metaclass=ABCMeta):
         return np.c_[self.ind_vars(), self.dep_vars(), self.extra_vars()]
 
     def _plot_1Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_1Ddata(data, ax, scatter=False, **mpl_kwargs)
+
+    def _scatter_1Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_1Ddata(data, ax, scatter=True, **mpl_kwargs)
+    
+    def _plot_2Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
+
+    def _scatter_2Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
+
+    def _plot_3Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
+
+    def _scatter_3Ddata(data, ax=None, **mpl_kwargs):
+        return graphable_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
+
+    def _graph_1Ddata(data, ax=None, scatter=False, **mpl_kwargs):
         """Plots XY data in a 2D Numpy Array
 
         Args:
@@ -84,14 +102,17 @@ class graphable_base(metaclass=ABCMeta):
             w=journals.acsNanoLetters.maxwidth_2col, h=3)
 
         # Plot data:
-        ax.scatter(data[:, 0], data[:, 1], **mpl_kwargs)
+        if scatter:
+            ax.scatter(data[:, 0], data[:, 1], **mpl_kwargs)
+        else:
+            ax.plot(data[:, 0], data[:, 1], **mpl_kwargs)
         
         # TODO: Uncomment...
         # tg.setDefaultTicks()
         
         return tg
     
-    def _plot_2Ddata(data, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
+    def _graph_2Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         """Plots 2D data, that is multiple dependent variables against a single independent variable.
 
         Args:
@@ -134,7 +155,10 @@ class graphable_base(metaclass=ABCMeta):
         axes = tg.ax
         
         for i in range(1, nd+1):
-            axes[i-1].scatter(data[:,0], data[:,i], **mpl_kwargs)
+            if scatter:
+                axes[i-1].scatter(data[:,0], data[:,i], **mpl_kwargs)
+            else:
+                axes[i-1].plot(data[:, 0], data[:, i], **mpl_kwargs)
             axes[i-1].legend()
             
         # TODO: Uncomment...
@@ -144,7 +168,7 @@ class graphable_base(metaclass=ABCMeta):
                 
         return tg
     
-    def _plot_3Ddata(data, axes=None, **mpl_kwargs) -> graphwrappers.transport_graph:
+    def _graph_3Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         #TODO: update to match _plot_2Ddata methods... NOT WORKING.
         assert isinstance(data, np.ndarray)
         dl = len(data.shape)
@@ -163,7 +187,10 @@ class graphable_base(metaclass=ABCMeta):
             data = data.reshape([data.shape[0] * data.shape[1],nd])
         
         for i in range(2, nd+2):
-            axes[i-2].scatter(data[:, 0], data[:,1], data[:, i], **mpl_kwargs)
+            if scatter:
+                axes[i-2].scatter(data[:, 0], data[:,1], data[:, i], **mpl_kwargs)
+            else:
+                axes[i-2].plot(data[:, 0], data[:,1], data[:, i], **mpl_kwargs)
 
         # TODO: Uncomment...
         # tg.setDefaultTicks()
@@ -181,7 +208,7 @@ class graphable_base(metaclass=ABCMeta):
         return
     
     @abstractmethod
-    def plot_all_data(self, axes=None, **mpl_kwargs):
+    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
         """Generates a plot of all data attached to object.
         Subplots determined by independent variables (columns) and dependent / extra variables (rows).
         Requires overriding to label individual plots appropraitely.
@@ -199,15 +226,15 @@ class graphable_base(metaclass=ABCMeta):
             
         li = len(vari.shape)
         if li == 1:
-            tg = graphable_base._plot_2Ddata(data, axes, **mpl_kwargs) 
+            tg = graphable_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
         elif li == 2 or li == 3:
-            tg = graphable_base._plot_3Ddata(data, axes, **mpl_kwargs)
+            tg = graphable_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")        
         return tg
 
     @abstractmethod
-    def plot_dep_vars(self, axes=None, **mpl_kwargs):
+    def plot_dep_vars(self, axes=None, scatter=False, **mpl_kwargs):
         """Generates a plot of all data attached to object.
         Subplots determined by independent variables (columns) and dependent / extra variables (rows).
         Requires override to label plots appropriately.
@@ -225,10 +252,10 @@ class graphable_base(metaclass=ABCMeta):
         li = len(vari.shape)
         if li == 1:
             data = np.c_[vari, vard]
-            tg = graphable_base._plot_2Ddata(data, axes, **mpl_kwargs)
+            tg = graphable_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         elif li == 2 or li == 3:
             data = np.c_[vari, vard]
-            tg = graphable_base._plot_3Ddata(data, axes, **mpl_kwargs)
+            tg = graphable_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")
 
@@ -274,8 +301,6 @@ class graphable_base(metaclass=ABCMeta):
             x_match = x.all_vars()
         
         #Check independent variables actually match up as intended.
-        print(self_match[:,0])
-        print(x_match[:,0])
         assert np.all(self_match[:,0:ind_var_len] == x_match[:, 0:ind_var_len])
         
         #Copy independent variables, subtract all other variables.
@@ -301,7 +326,7 @@ class graphable_base_dataseries(graphable_base):
         return np.c_[*[self.dataseries[key] for key in self.dataseries]]
     
     @abstractmethod
-    def plot_dataseries(self, key, ax=None, **mpl_kwargs):
+    def plot_dataseries(self, key, ax=None, scatter=False, **mpl_kwargs):
         """Generates a single plot of a specific key in dataseries.
         Needs override with super call to label x axis for indipendent variables.
         """
@@ -311,31 +336,47 @@ class graphable_base_dataseries(graphable_base):
         value = self.dataseries[key]
         graphable_base._data_compatability(indvars, value)
         data = np.c_[indvars, value]
-        tg = graphable_base._plot_2Ddata(data, ax, **mpl_kwargs)
+        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         tg.ax[0].set_ylabel(key)
         return tg
     
     @abstractmethod
-    def plot_dataseries_with_dep_vars(self, key, ax=None, **mpl_kwargs):
+    def plot_dataseries_with_dep_vars(self, key, ax=None, scatter=False, **mpl_kwargs):
         """Generates a plot of all dependent data attached to object plus specific key in dataseries.
         Subplots determined by independent variables (columns) and dependent / extra variables (rows).
         Needs override with super call to label x & y axis for indipendent/dependent variables.
         """
         #TODO: Update for 3D version.
-        assert key in self.dataseries
+        if isinstance(key, (list, np.ndarray)):
+            vare=None
+            for k in key:
+                assert k in self.dataseries
+                vare = self.dataseries[k] if vare is None else np.c_[vare, self.dataseries[k]]
+        else:
+            assert key in self.dataseries
+            vare = self.dataseries[key]
+            
         vari = self.ind_vars()
         vard = self.dep_vars()
-        vare = self.dataseries[key]
         graphable_base._data_compatability(vari, vard)
         graphable_base._data_compatability(vari, vare)
         data = np.c_[vari, vard, vare]
-        tg = graphable_base._plot_2Ddata(data, ax, **mpl_kwargs)
+        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         i = vard.shape[-1]
         tg.ax[i].set_ylabel(key)
         return tg
 
+    @override
     @abstractmethod
-    def plot_all_dataseries(self, ax=None, **mpl_kwargs):
+    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
+        tg = super().plot_all_data(axes, scatter, **mpl_kwargs)
+        dep_len = self.dep_vars().shape[-1]
+        for i in range(len(self.dataseries)):
+            tg.ax[dep_len + i].set_ylabel(list(self.dataseries)[i])
+        return tg
+
+    @abstractmethod
+    def plot_all_dataseries(self, ax=None, scatter=False, **mpl_kwargs):
         """Generates a plot of all dataseries.
         Subplot for each dataseries (rows).
         Needs override with super call to label x axis for indipendent variables.
@@ -345,7 +386,7 @@ class graphable_base_dataseries(graphable_base):
         ds_data = np.c_[*[self.dataseries[key] for key in self.dataseries]]
         graphable_base._data_compatability(indvars, ds_data)
         data = np.c_[indvars, ds_data]
-        tg = graphable_base._plot_2Ddata(data=data, ax=ax, **mpl_kwargs)
+        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         for i in range(len(self.dataseries)):
             tg.ax[i].set_ylabel(list(self.dataseries)[i])
         return tg
