@@ -1,6 +1,8 @@
 import pylectric
 import numpy as np
+from scipy import interpolate
 import math
+import warnings
 
 def reduction(data, step, colN=0):
     """Averages data to fit into bins with width step, along the column colN"""
@@ -22,7 +24,7 @@ def reduction(data, step, colN=0):
         #Caculate step precision.
         decimals = - int(np.floor(np.log10(step)))
         #apply rounding to linspace.
-    x = np.round(x,decimals=decimals) #correct any float imprecision. ie - linspace(-8.0, 8.01, 1602) does not give 0.01 steps appropriately. 
+        x = np.round(x,decimals=decimals) #correct any float imprecision. ie - linspace(-8.0, 8.01, 1602) does not give 0.01 steps appropriately. 
 
     ### Generate averaged data from other indexes
     # Acquire 
@@ -36,10 +38,135 @@ def reduction(data, step, colN=0):
         x1 = x[i] - 0.5 * step
         x2 = x[i] + 0.5 * step
         ind = np.where(np.bitwise_and(data[:,colN]>=x1, data[:,colN] < x2))[0]
-        # ind_data = data2[ind, :]
+        if len(ind) == 0:
+            warnings.warn("No datapoints between {:0.2f} and {:0.2f} in the column of interest.".format(x1,x2))
         ind_data = data[ind, :]
         new_data[i,:] = np.average(ind_data, axis=0)
         new_data_std[i,:] = np.std(ind_data, axis=0)
+    return x, new_data, new_data_std
+
+def reduction_interpolate(data, step, colN=0, linear=True):
+    """Interpolates all data to fit into points evenly spaced by step, along the column colN.
+    Uses all points within the +- step/2 width, plus nearest neibours.
+    Uses either linear interpolation or barycentric interpolation from NumPy.
+
+    Parameters
+    ----------
+    data : _type_
+        _description_
+    step : _type_
+        _description_
+    colN : int, optional
+        _description_, by default 0
+    """
+    assert isinstance(step, float) or isinstance(step, int)
+    assert step > 0
+    assert colN >= 0
+    
+    # Get Max/Min
+    nmax = np.amax(data[:, colN])
+    nmin = np.amin(data[:, colN])
+    print(1,nmin,nmax)
+
+    # number of new points
+    # As using bins (ie, half width either side of x), only require rounding, not floor/ceiling.
+    Nupper = int(np.round(nmax / step))
+    Nlower = int(np.round(nmin / step))
+    N = Nupper - Nlower
+    # Setup new colN
+    x = np.linspace(Nlower * step, Nupper * step, N+1)
+    print(2,x[0],x[-1])
+    
+    if type(step) != int and step % 1 != 0:
+        # Caculate step precision.
+        decimals = - int(np.floor(np.log10(step)))
+        # apply rounding to linspace.
+        # correct any float imprecision. ie - linspace(-8.0, 8.01, 1602) does not give 0.01 steps appropriately.
+        x = np.round(x, decimals=decimals)
+
+    # Generate interpolated data from other indexes
+    # Setup new arrays
+    new_data = np.zeros((N+1, len(data[0])))
+    new_data_std = np.zeros((N+1, len(data[0])))
+    
+    # Popuate with interpolated data
+    for i in range(N+1):
+        xi = x[i]
+        
+        x1 = xi - 0.5 * step
+        x2 = xi + 0.5 * step
+        
+        # domain inclusive - indexes within x1-x2 data range. Might be zero.
+        dombits1 = data[:, colN] >= x1
+        dombits2 = data[:, colN] < x2
+        dombits = np.bitwise_and(dombits1, dombits2)
+        dominc = np.where(dombits)
+        # domain exclusive - indexes closest to x1-x2 data range. Inverse of dominc.
+        # domexc = np.where(np.bitwise_not(dominc))
+        domexc1 = np.where(np.bitwise_not(dombits1))
+        domexc2 = np.where(np.bitwise_not(dombits2))
+        
+        #Check if at endpoints of bins, where there are no points beyond xi. 
+        # Set alternative point to nearest neighbor outside range, and linearly interpolate.
+        if len(domexc1[0]) == 0:
+            if i==0: #no values less than 0th bin range.
+                domexc1 = domexc2
+            else:
+                raise IndexError("No values less than index #",i,": xi=",xi,". This should never happen.")
+            
+        if len(domexc2[0]) == 0:
+            if i==N: #no values less than 0th bin range.
+                domexc2 = domexc1
+            else:
+                raise IndexError("No values greater than index #",i,": xi=",xi,". This should never happen.")
+        
+        # Find the nearest points outside the domain (x1,x2).
+        x1closest = np.abs(data[domexc1][:,colN] - x1)
+        x2closest = np.abs(data[domexc2][:,colN] - x2)
+        min1 = np.where(np.min(x1closest) == x1closest)
+        min2 = np.where(np.min(x2closest) == x2closest)
+        
+        # warnings.warn("Multiple 'closest' values to interpolation domain.", 
+        #               RuntimeWarning, stacklevel=2)
+        
+        # Use multiple values to construct the linear/baryocentric interpolation.
+        p1 = data[domexc1][min1]
+        p2 = data[dominc]
+        p3 = data[domexc2][min2]
+        
+        
+        # dont add same datapoint twice. This can occur at xmin and xmax values.
+        if np.array(min1).shape == np.array(min2).shape and np.all(p1[:,colN] == p3[:,colN]):
+            yobs = np.r_[p1, p2]
+            xobs = yobs[:,colN]
+            
+            
+            
+            #linearly interpolate here, as endpoints more sensitive to big error if using polynomial interpolation.
+            for col in range(yobs.shape[-1]):
+                f = interpolate.interp1d(xobs, yobs[:,col], fill_value="extrapolate" if (i==0 or i==N) else np.nan)
+                yc = f(xi)
+                
+                # y = interpolate.pchip_interpolate(xobs,yobs,x[i]) #sets colN values to x[i], requires no duplicate x values...
+                new_data[i, col] = yc
+        else:
+            # yobs = np.sort(np.r_[p1,p2,p3], axis=colN)
+            yobs = np.r_[p1, p2, p3]
+            xobs = yobs[:, colN]
+            # xobs = np.r_[p1[:,colN],p2[:,colN],p3[:,colN]]
+            # Interpolate new data.
+            y = interpolate.barycentric_interpolate(xobs, yobs, xi)  # sets colN values to x[i] anyway haha.
+            if np.all(np.isnan(y)):
+                for col in range(yobs.shape[-1]):
+                    f = interpolate.interp1d(xobs, yobs[:,col], fill_value="extrapolate" if (i==0 or i==N) else np.nan)
+                    yc = f(xi)
+                    y[col] = yc
+                warnings.warn("Barycentric_interpolate failed for:\nxi="+str(xi)+",\nxobs="+str(
+                    xobs)+",\nyobs="+str(yobs[:, 0:3])+".\nUsing linear interpolate instead. New values are"+str(y[0:3]))
+                if np.all(np.isnan(y)):
+                    warnings.warn("Linear_interpolate failed for: xi="+str(xi)+", as well. Setting value to nan.")
+            new_data[i] = y
+            
     return x, new_data, new_data_std
 
 def trim_symmetric(data, colN):
@@ -65,7 +192,6 @@ def trim_symmetric(data, colN):
     for len1 in range(len(forward)):
         for i in range(0,len(forward)-len1):
             for j in range(0,len(forward)-i-len1):
-                print(i,j)
                 overlap = np.all(forward[i:i+len1] == backward[j:j+len1]) #all have to be overlapping...
                 if overlap and (len1 > max_overlap):
                     max_overlap = len1
@@ -132,13 +258,14 @@ def trim_matching_fromsimilar(data1, data2, colN = [0]):
         
         
 
-def symmetric_reduction(data, step, colN=0):
+def symmetric_reduction(data, step, colN=0, sym_x = 0):
     """Generates same function as 'reduction', but additionally trims the data so that the reduced data is symmetric about the middle of colN.
 
     Args:
         data (_type_): _description_
         step (_type_): _description_
         colN (int, optional): _description_. Defaults to 0.
+        sym_x (int/float, optional): Defaults to 0. 
 
     Raises:
         AttributeError: _description_
@@ -155,12 +282,13 @@ def symmetric_reduction(data, step, colN=0):
     assert isinstance(colN, int)
     
     x, new_data, new_data_std = reduction(data,step, colN)
-    new_data[:, colN] = x #override colN to ensure symmetric data. 
+    new_data[:, colN] = x #override colN to ensure symmetric data.
     
     assert len(x) > 1
     # Modify bounds of data to keep symettric about 0.
-    dif = abs(x[0]) - abs(x[-1]) #endpoint difference
-    if dif == 0 and x[0] == -x[-1]:
+    dif = (abs(x[0]- sym_x) - abs(x[-1]- sym_x)) #endpoint differences from sym point.
+    
+    if dif == 0 and (x[0]-sym_x) == -(x[-1]-sym_x):
         pass #bounding and balancing are GOOD.
     elif dif == 0:
         raise AttributeError("Specified ColN starts and ends on the same signed value.")
@@ -175,7 +303,7 @@ def symmetric_reduction(data, step, colN=0):
             x = x[ind:]
             new_data = new_data[ind:,:]
             new_data_std = new_data_std[ind:, :]
-        else: #dif < 0
+        else: #dif <= 0
             # if multiple values, take last value (furthest away from x[0])
             srch = np.where(np.abs(x[1:]) == np.abs(x[0]))[0]
             if len(srch) > 0:
@@ -183,6 +311,68 @@ def symmetric_reduction(data, step, colN=0):
             else:
                 raise AttributeError("No enpoint values matched.")
             ind = 2 + srch[-1] #need to index forward
+            x = x[:ind]
+            new_data = new_data[:ind]
+            new_data_std = new_data_std[:ind, :]
+    return x, new_data, new_data_std
+
+
+def symmetric_reduction_interpolate(data, step, colN=0, sym_x=0):
+    """Generates same function as 'reduction_interpolate', 
+    but additionally trims the data so that the reduced data is symmetric about the middle of colN.
+
+    Args:
+        data (_type_): _description_
+        step (_type_): _description_
+        colN (int, optional): _description_. Defaults to 0.
+        sym_x (int/float, optional): Defaults to 0. 
+
+    Raises:
+        AttributeError: _description_
+        AttributeError: _description_
+        AttributeError: _description_
+
+    Returns:
+        _type_: _description_
+    """
+    assert isinstance(data, np.ndarray)
+    assert len(data) > 1
+    assert len(data.shape) == 2
+    assert isinstance(step, float) or isinstance(step, int)
+    assert isinstance(colN, int)
+
+    x, new_data, new_data_std = reduction_interpolate(data, step, colN)
+    new_data[:, colN] = x  # override colN to ensure symmetric data.
+
+    assert len(x) > 1
+    # Modify bounds of data to keep symettric about 0.
+    # endpoint differences from sym point.
+    dif = (abs(x[0] - sym_x) - abs(x[-1] - sym_x))
+
+    if dif == 0 and (x[0]-sym_x) == -(x[-1]-sym_x):
+        pass  # bounding and balancing are GOOD.
+    elif dif == 0:
+        raise AttributeError(
+            "Specified ColN starts and ends on the same signed value.")
+    else:
+        if dif > 0:
+            # if multiple values, take first value (furthest away from x[-1])
+            srch = np.where(np.abs(x[:-1]) == np.abs(x[-1]))[0]
+            if len(srch) > 0:
+                ind = srch[0]
+            else:
+                raise AttributeError("No enpoint values matched.")
+            x = x[ind:]
+            new_data = new_data[ind:, :]
+            new_data_std = new_data_std[ind:, :]
+        else:  # dif <= 0
+            # if multiple values, take last value (furthest away from x[0])
+            srch = np.where(np.abs(x[1:]) == np.abs(x[0]))[0]
+            if len(srch) > 0:
+                ind = srch[-1]
+            else:
+                raise AttributeError("No enpoint values matched.")
+            ind = 2 + srch[-1]  # need to index forward
             x = x[:ind]
             new_data = new_data[:ind]
             new_data_std = new_data_std[:ind, :]
@@ -258,3 +448,85 @@ def normalise(data, colN = None) -> np.ndarray:
         norm = data[:, colN] / imax
     
     return norm
+
+
+def split_dataset_by_turning_point(data, colN=0, max=True, endpoint_exclusion=0) -> tuple[np.ndarray, np.ndarray]:
+    """Finds data splitpoint by considering the abs maximum/minimum value. 
+       If more than 1 datapoint at same min/max value, inbetween values will be deleted.
+
+    Args:
+        data (_type_): Dataset to split
+        colN (_type_, optional): Column of the turning point. Defaults to 0.
+        max (bool, optional): Search order for maximum or minium. Defaults to True (finding a maximum).
+        endpoint_exclusion (float, optional): A total percentage of the data to exclude from the search by trimming ends.
+
+    Raises:
+        AttributeError: If a singular turning point cannot be identified.
+
+    Returns:
+        (np.ndarray, np.ndarray)
+    """
+    i = colN
+    
+    assert endpoint_exclusion >= 0 and endpoint_exclusion <= 100 #limits for percentages.
+    
+    def srchMax(data,i):
+        j = None
+        maxima = np.where(data[:,i]==np.max(data[:,i]))
+        if len(maxima[0]) == 1: #only 1 max
+            j = maxima[0][0]
+        elif len(maxima[0] > 1):
+            # calculate index differences.
+            d = np.diff(maxima[0])
+            # if all next to each other, take middle.
+            if np.all(np.abs(d) == 1):
+                j = maxima[0][math.floor(len(maxima)/2)]  # middle index.
+            else: 
+                #if separated by two or more entries, just average.
+                #raise warning too....                 
+                warnings.warn("Finding extrema turning point: Two or more values identical thus unclear turning point. Have determined turning point by taking average of values.")
+                j = int(np.round(np.average(maxima[0])))
+        return j
+
+    def srchMin(data,i):
+        j = None
+        minima = np.where(data[:,i]==np.min(data[:,i]))
+        if len(minima[0]) == 1: #only 1 min
+            j = minima[0][0]
+        elif len(minima[0] > 1):
+            # calculate index differences.
+            d = np.diff(minima[0])
+            # if all next to each other, take middle.
+            if np.all(np.abs(d) == 1):
+                j = minima[0][math.floor(len(minima)/2)]  # middle index.
+            else:
+                warnings.warn(
+                    "Finding extrema turning point: Two or more values identical thus unclear turning point. Have determined turning point by taking average of values.")
+                j = int(np.round(np.average(minima[0])))
+        return j
+
+    #setup data if trimming active:
+    searchData = data
+    frac=0
+    if endpoint_exclusion != 0:
+        dlen = len(data)
+        frac = round(dlen * endpoint_exclusion / 100 / 2) #factor two due to cutting from each end.
+        print(f"Trimming {frac} datapoints at each end to search for extrema.")
+        searchData = data[frac:-frac,:]
+
+    # Find TP in data
+    if max:
+        j = srchMax(searchData, i)
+        if not j:
+            j = srchMin(searchData, i)
+    else:
+        j = srchMin(searchData, i)
+        if not j:
+            j = srchMax(searchData, i)
+            
+    if not j:
+        raise AttributeError("The dataset does not have a singular turning point.")    
+    else:
+        ds1 = data[:frac+j+1,:].copy() #inclusive of endpoint j.
+        ds2 = data[frac+j:,:].copy()
+        return ds1, ds2 

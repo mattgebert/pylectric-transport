@@ -37,19 +37,30 @@ def split_bidirectional_sweeps(A):
 def remove_duplicate_columns(A, labels):
     B = A.copy()
     NCols = B.shape[1]
-    dup_ind = []
+    # dup_ind = []
+    dup_ind = {}
     for i in range(NCols):
         for j in range(1,NCols-i):
             if np.all(A[:,i]==A[:,i+j]):
-                dup_ind.append(i+j)
-    inds = list(set(dup_ind))
+                # dup_ind.append(i+j)
+                if (i+j) in dup_ind:
+                    dup_ind[i+j] = dup_ind[i+j].append(i)
+                else:
+                    dup_ind[i+j]=[i]
+    inds = list(set(dup_ind.keys()))
     unique_ind = np.array(inds, dtype=np.dtype(np.int32))
     B = np.delete(B, unique_ind, axis=1)
     new_labels = labels
     if len(unique_ind) != 0:
         print("Removing duplicate data columns:")
-        for i in sorted(unique_ind, reverse=True):
-            print("...\t" + labels[i])
+        for i in sorted(unique_ind, reverse=True): #reverse deletes preserving index.
+            dup_labels = [labels[j] for j in dup_ind[i]]
+            print("...\t'" + labels[i] + "', identitcal to ...\n" +\
+                "...\t\t(1)...\t" + dup_labels[0])
+            if len(dup_labels) > 1:
+                for j in range(len(dup_labels)-1):
+                    dl = dup_labels[1+j:]
+                    print("...\t\t-" + str(j) + ":\t'" + dl + "'")
             del new_labels[i]
     return (B, new_labels)
 

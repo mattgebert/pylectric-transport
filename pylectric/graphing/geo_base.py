@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 from enum import Enum
+import pandas as pd
 
 class graphable_base(metaclass=ABCMeta):
     """Class to expand and bind graphing functions to geometric objects.
@@ -24,7 +25,7 @@ class graphable_base(metaclass=ABCMeta):
         # if not hasattr(self, "data"):
             # raise AttributeError("No data passed to constructor.")
         super().__init__()
-        self.sweep_dir = self.sweep_enum.UNDEFINED
+        self.sweep_dir = self.sweep_enum.UNDEFINED #TODO: implement definition of sweep direction upon data addition...
         return None
 
     @abstractmethod
@@ -133,7 +134,7 @@ class graphable_base(metaclass=ABCMeta):
         
         # Requirements for axes object
         if axes is not None: #TODO: make this possible for axes arrays to be included from matplotlib.subplots [or isinstance(array)]
-            assert isinstance(axes, plt.Axes) or (isinstance(axes, (list, tuple)) and np.all([isinstance(ax, plt.Axes) for ax in axes]))
+            assert isinstance(axes, plt.Axes) or (isinstance(axes, (list, tuple, np.ndarray)) and np.all([isinstance(ax, plt.Axes) for ax in axes]))
         # Requirements for Data
         assert isinstance(data, np.ndarray) 
         assert len(data.shape) == 2
@@ -313,6 +314,9 @@ class graphable_base(metaclass=ABCMeta):
             #single x variable
             return pylectric.signals.feature_detection.find_arrow_location(xdata=self.ind_vars(),ydata=self.dep_vars()[:,i])
 
+    def to_DataFrame(self):
+        return pd.DataFrame(self.all_vars())
+
 class graphable_base_dataseries(graphable_base):
     def __init__(self, dataseries) -> None:
         self.dataseries = {}
@@ -371,8 +375,10 @@ class graphable_base_dataseries(graphable_base):
     def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
         tg = super().plot_all_data(axes, scatter, **mpl_kwargs)
         dep_len = self.dep_vars().shape[-1]
+        labels = list(self.dataseries)
         for i in range(len(self.dataseries)):
-            tg.ax[dep_len + i].set_ylabel(list(self.dataseries)[i])
+            print(i,labels[i])
+            tg.ax[dep_len + i].set_ylabel(labels[i])
         return tg
 
     @abstractmethod

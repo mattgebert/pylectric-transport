@@ -2,24 +2,44 @@
 from __future__ import annotations
 # Function Libraries
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from scipy import optimize as opt
 # Custom Libraries
 import pylectric
 from pylectric.graphing import geo_base, graphwrappers
-from pylectric.analysis import mobility
+from pylectric.analysis import mobility, hall, localisation
 # Programming Syntax & annotations #2
 import warnings
 from overrides import override
 from abc import abstractmethod
-import inspect
+# import inspect
+from decimal import Decimal
+from matplotlib.offsetbox import AnchoredText
+import pandas as pd
 
 class hallbar_measurement(geo_base.graphable_base_dataseries):
     """Class for a hall measurement, that is magnetic field dependence of Rxx and Rxy of a device.
         Does not assume gated geometry, however does assume magnetic measurement for the purpose of Rxy data.
+        Geom parameter converts resistance to resistivity. Ie. Rho = R * Geom
         
-        Can provide additional data to add to object, in the form of a dictionary of data {label:numpy_array}.
+        Can provide additional data to add to object via 'params', in the form of a dictionary of data {label:numpy_array}.
     """
+    # attribute for keeping track of colours in plotting over 
+    # multiple hallbar_measurement objects.
+    clr_i = 0 
+    COLS = ['#1f77b4',
+            '#ff7f0e',
+            '#2ca02c',
+            '#d62728',
+            '#9467bd',
+            '#8c564b',
+            '#e377c2',
+            '#7f7f7f',
+            '#bcbd22',
+            '#17becf']
+    
     
     def __init__(self, field, rxx, rxy, dataseries = {}, geom = 1, params = {}):
         # initialise super object
@@ -48,6 +68,11 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         self.params = {}
         self.params.update(params)
         return
+    
+    @classmethod
+    def reset_clr_counter(cls):
+        hallbar_measurement.clr_i = 0
+        cls.clr_i = 0
     
     def _calculateTransport(self):
         # Convert rxx, rxy to rhoxx, rhoxy, sigmaxx, sigmaxy
@@ -185,13 +210,14 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         return newobj
     
     @override
-    def plot_all_data(self, axes=None, scatter=False, ** mpl_kwargs) -> graphwrappers.transport_graph:
+    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         tg = super().plot_all_data(axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
-        # for i, key in zip(range(len(self.dataseries)), self.dataseries):
-        #     tg.ax[2+i].set_ylabel(key)
+        # TODO: Comment this loop, as it should occur in subclass, but isn't working....
+        for i, key in zip(range(len(self.dataseries)), self.dataseries): 
+            tg.ax[2+i].set_ylabel(key)
         return tg
 
     @override
@@ -229,6 +255,10 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         tg.yResistivity(i=0, subscript="xx")
         tg.yResistivity(i=1, subscript="xy")
         return tg
+    
+    @override
+    def to_DataFrame(self):
+        return pd.DataFrame(self.all_vars(), columns=["Field","$\rho_{xx}$","$\rho_{xy}$"] + list(self.dataseries.keys()))
 
     def MR_percentages(self):
         # Get zero field location
@@ -297,6 +327,432 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         tg.yMR_absolute(i=-1, subscript="xy")
         return
      
+    @staticmethod
+    def _hall_measurement_fit(field, rxy, rxx, thickness = None, **kwargs):
+        """Performs the functional fit between Field, Rxy and Rxx to determine the carrier density, 
+
+        Parameters
+        ----------
+        field : numpy.ndarray
+            Dataset field values
+        rxy : numpy.ndarray
+            Dataset Rxy values (not resistivity)
+        rxx : numpy.ndarray or float
+            Dataset Rxx values, or singular Rxx at B=0.
+        thickness : float, optional
+            Performs a 2D Hall measurement if None, otherwise
+            calculates a 3D Hall measurement. None by default.
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            Returns a tuple of the parameters and covariance matrix.
+            Parameters are:
+            1 - Hall density
+            2 - Hall mobility
+            3 - Rxy @ B = 0
+        """
+        # Check if rxx has zero field value.
+        if not (np.any(field > 0) and np.any(field<0)):
+            warnings.warn("Field domain doesn't cover B=0. Hall mobility may be inaccurate.")
+        
+        # Fit
+        if thickness is None:
+            params, unc = hall.hall2D.hall_measurement_fit(
+                field=field, rxy=rxy, rxx=rxx, **kwargs)
+        else:
+            params, unc = hall.hall.hall_measurement_fit(
+                field=field, rxy=rxy, rxx=rxx, thickness=thickness, **kwargs)
+        
+        return params, unc
+        
+    def _hall_measurement_plot(self, params, unc, thickness=None, fitdomain=None,  
+                               axes=None):
+        
+        #Setup kwargs for Hall function
+        fit_kwargs = {
+            "hall_density": params[0],
+            "rxy0": params[2]
+        }
+        
+        #If thickness provided, adjust kwarg and set function.
+        if thickness is not None: # Add thickness if performing a 3D measurement.
+            fit_kwargs["thickness"] = thickness
+            hallfn = hall.hall.hall_resistance
+        else:
+            hallfn = hall.hall2D.hall_resistance
+        
+        # If fitdomain not passed, default to regular field.
+        if fitdomain is None:
+            fitdomain = [np.min(self.field), np.max(self.field)]
+        
+        #Setup new figure if not passed.
+        ax = axes if axes is not None else plt.subplots(1,1)[1]
+            
+        # Plot Fit Line over display domain.
+        endpoints_rxy = hallfn(fitdomain, **fit_kwargs)
+        ax.plot(fitdomain, endpoints_rxy, "--", label="Fit")
+
+        # Plot Fit Domain Endpoints
+        fit_rxy = hallfn(fitdomain, **fit_kwargs)
+        ax.scatter(fitdomain, fit_rxy, marker='|', s=1.5, label="Fit Domain")
+
+        # Plot Raw Data
+        ax.scatter(self.field, self.rxy, label="Data", s=0.1)
+
+        # Labels
+        tg = graphwrappers.transport_graph(ax)
+        tg.xFieldT(0)
+        tg.yResistance(0, subscript="xy")
+        ax.set_title("Hall Density Fit")
+
+        # Display Fit Values on Graph:
+        strvals = ["{:1.2E} $\pm$ {:1.2E}".format(
+            Decimal(params[i]), Decimal(unc[i])) for i in range(3)]
+
+        dim = 2 if thickness is None else 3
+        strdim = str(dim)
+        ann_str = r"$n_{\mathrm{Hall}}$: "+ strvals[0]+ r" m$^{-" + strdim + r"}$" +\
+            "\n" r"$\mu_{\mathrm{Hall}}$: "+ strvals[1]+ r" m$^{" + strdim + r"}$/Vs"+\
+            "\n" r"$R_{xy,B=0}$: " + strvals[2] + r" $\Omega$"
+
+        anchor = AnchoredText(ann_str, loc=3 if params[0] < 0 else 4, prop={"fontsize":4})
+        ax.add_artist(anchor)
+
+        # Legend
+        ax.legend()
+        return tg
+        
+    def hall_measurement_fit(self, thickness=None, field_range = (None, None), 
+                             axes=None, display=False, fit_kwargs={}):
+        """ Uses object Field, Rxx and Rxy to fit the following hall parameters:
+        - Hall Density N_hall (m^{-3} or m^{-2})
+        - Hall Mobility Mu_hall (m^{3}/Vs or m^{2}/Vs)
+        - Zero-field Rxy (Ohms)
+        To calculate Mu_hall, the Rxx value closest to Field=0 is used.
+        If thickness is None, assumed measurement to be 2D instead of 3D.
+
+        Parameters
+        ----------
+        thickness : float, optional
+            The thickness of the sample. 
+            If None, assumed to be a 2D hall measurement instead of 3D.
+        field_range : tuple, optional
+            , by default (None, None)
+        axes : matplotlib.axes, optional
+            Optional parameter to pass graphing axis.
+        display : bool, optional
+            Option to generate a fit graph or not, by default False. 
+            Ignored if an axes object is passed.
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        
+        # Identify subset of data within field range to fit.
+        lowerb, upperb = field_range
+        if lowerb is not None or upperb is not None:
+            # Both bounds
+            if lowerb is not None and upperb is not None: 
+                inds = np.where((upperb > self.field) & (self.field > lowerb))
+            # Only lower bound
+            elif lowerb is not None: 
+                inds = np.where(self.field > lowerb)
+            # Only upper bound
+            elif upperb is not None: 
+                inds = np.where(upperb >= self.field)
+            # Acquire subset
+            subset_f = self.field[inds]
+            subset_rxy = self.rxy[inds]
+            subset_rxx = self.rxx[inds]
+        else: #unbounded!
+            subset_f = self.field
+            subset_rxy = self.rxy
+            subset_rxx = self.rxx
+        
+        #Adjust endpoint graphing markers for future.
+        field_endpoints = np.array([np.min(self.field), np.max(self.field)]) #domain to plot 
+        fit_field = field_endpoints.copy()  # graphing markers for fit.
+        if lowerb is not None and lowerb > fit_field[0]:
+            fit_field[0] = lowerb
+        if upperb is not None and upperb < fit_field[1]:
+            fit_field[1] = upperb
+        
+        # Perform fit
+        params, unc = self._hall_measurement_fit(
+            field=subset_f, rxy=subset_rxy, rxx=subset_rxx, thickness=thickness, **fit_kwargs)
+        
+        # Graph if desired.
+        if display or axes is not None: #either condition allows for plots to be generated.
+            # Generate graph
+            tg = self._hall_measurement_plot(params=params, unc=unc, thickness=thickness, axes=axes)
+            
+        # Don't return transport graph object, user can pass axis to control graphing.
+        return params, unc
+    
+    def _HLN_plot(self, params, unc, fitdomain=None, axes=None):
+        #Setup kwargs for Hall function
+        fit_kwargs = {
+            "alpha": params[0],
+            "lphi": params[1]
+        }
+        if len(params)==3:
+            fit_kwargs["offset"] = params[2]
+            WALfn = localisation.WAL.HLN_offset
+        elif len(params) == 2:
+            WALfn = localisation.WAL.HLN
+        else:
+            raise AttributeError("Not enough parameters supplied to plot.")
+        
+        #Setup new figure if not passed.
+        ax = axes if axes is not None else plt.subplots(1,1)[1]
+        
+         # Get raw data inside subset
+        if fitdomain is not None:
+            ssinds = np.where(np.bitwise_and(
+                self.field > fitdomain[0], self.field < fitdomain[1]))  # subset field
+            ssfield = self.field[ssinds]
+        else:
+            ssfield = self.field
+
+        # If fitdomain not passed, default to regular field.
+        if fitdomain is None:
+            fitdomain = [np.min(self.field), np.max(self.field)]
+
+        # Find minimum field value
+        minind = np.where(np.abs(ssfield) == np.min(np.abs(ssfield)))
+        sigmaxx_b0 = np.average(self.sigmaxx[minind])
+        # remove zerofield offset within subset data.
+        dsigmaxx = self.sigmaxx - sigmaxx_b0
+        # Plot raw data according to subset offset. Only plot data less than 3x fitdomain[1].
+        if np.max(np.abs(self.field)) < 3 * np.max(np.abs(fitdomain)):
+            #no need to select subset of scattered data.
+            scatfield = self.field
+            scatdsig = dsigmaxx
+        else:
+            #display subset of scattered data.
+            scatinds = np.where(np.abs(self.field) < 3 * np.max(np.abs(fitdomain)))
+            scatfield = self.field[scatinds]
+            scatdsig = dsigmaxx[scatinds]
+            
+        #Use class var for plotting
+        hm = hallbar_measurement 
+        ax.scatter(scatfield, scatdsig, label="Data", s=0.3, 
+                    c=hm.COLS[hm.clr_i % len(hm.COLS)])
+        hm.clr_i += 1
+        
+        # Plot Fit line outside display domain with dashes.
+        dashinds = np.where(np.abs(scatfield) > np.max(np.abs(fitdomain)))
+        if len(dashinds[0] > 0):
+            dashdomain = [np.min(scatfield[dashinds]), np.max(scatfield[dashinds])]
+            dashx = np.linspace(dashdomain[0],dashdomain[1],400)
+            dashsigmaxx = WALfn(dashx, **fit_kwargs)
+            ax.plot(dashx, dashsigmaxx, "--",
+                    c=hm.COLS[hm.clr_i % len(hm.COLS)])
+        
+        # Plot Fit Line over display domain. Needs more points than just a line haha.
+        x = np.linspace(fitdomain[0],fitdomain[1],400)
+        fitsigmaxx = WALfn(x, **fit_kwargs)
+        ax.plot(x, fitsigmaxx, label="Fit", 
+                c=hm.COLS[hm.clr_i % len(hm.COLS)])
+
+        # Plot Fit Domain Endpoints
+        fit_sigmaxx = WALfn(fitdomain, **fit_kwargs)
+        ax.scatter(fitdomain, fit_sigmaxx, marker='|', s=100, 
+                    c=hm.COLS[hm.clr_i % len(hm.COLS)])
+    
+        hm.clr_i += 1
+        # ax.scatter(fitdomain, fit_sigmaxx, marker='|', s=100, label="Fit Domain")
+
+        # Labels
+        tg = graphwrappers.transport_graph(ax)
+        tg.xFieldT(0)
+        tg.yConductivity(0, subscript="xx")
+        ax.set_title("WAL Fit")
+
+        # Display Fit Values on Graph:
+        strvals = ["{:1.2E} $\pm$ {:1.2E}".format(
+            Decimal(params[i]), Decimal(unc[i])) for i in range(len(params))]
+
+        # dim = 2 if self.thickness is None else 3
+        # strdim = str(dim)
+        ann_str = r"$\alpha$: "+ strvals[0]+\
+            "\n" + r"$\ell_{\phi}$: "+ strvals[1]+ r" m"+\
+            ("" if len(params)==2 else "\n" +\
+                r"$\sigma_{xx}^{offset}$ = " + strvals[2] + " S")
+
+        anchor = AnchoredText(ann_str, loc=2 if params[0] < 0 else 3, prop={"fontsize":6})
+        ax.add_artist(anchor)
+
+        # Legend
+        ax.legend()
+        
+        return
+    
+    def HLN_fit(self, field_range=(None, None), axes=None, display=False, 
+                p0 = [], bounds=([-1, 0, -np.infty], [1, np.infty, np.infty])):
+        
+        param_names = ["alpha", "lphi", "offset"]
+        assert len(p0) <= len(param_names)
+
+        # Setup intial parameters for fitting.
+        fit_kwargs = {}
+        for key, val in zip(param_names, p0):
+            fit_kwargs[key] = val
+        
+        # Identify subset of data within field range to fit.
+        lowerb, upperb = field_range
+        if lowerb is not None or upperb is not None:
+            # Both bounds
+            if lowerb is not None and upperb is not None:
+                inds = np.where(np.bitwise_and(upperb >= self.field, self.field > lowerb))
+            # Only lower bound
+            elif lowerb is not None:
+                inds = np.where(self.field > lowerb)
+            # Only upper bound
+            elif upperb is not None:
+                inds = np.where(upperb >= self.field)
+            # Acquire subset
+            subset_f = self.field[inds]
+            subset_sigmaxx = self.sigmaxx[inds]
+        else:  # unbounded!
+            subset_f = self.field
+            subset_sigmaxx = self.sigmaxx
+        
+        # Adjust endpoint graphing markers for future.
+        field_endpoints = np.array(
+            [np.min(self.field), np.max(self.field)])  # domain to plot
+        fit_field = field_endpoints.copy()  # graphing markers for fit.
+        if lowerb is not None and lowerb > fit_field[0]:
+            fit_field[0] = np.min(subset_f)
+        if upperb is not None and upperb < fit_field[1]:
+            fit_field[1] = np.max(subset_f)
+
+        # Perform fit
+        # params, unc = self._HLN_fit(
+        #     field=subset_f, sigmaxx=subset_sigmaxx, **fit_kwargs)
+        params, unc = localisation.WAL.fitting.HLN_fit(
+            B=subset_f, sigmaxx=subset_sigmaxx, bounds=bounds, **fit_kwargs)
+
+
+        # Graph if desired.
+        # either condition allows for plots to be generated.
+        if display or axes is not None:
+            # Generate graph
+            tg = self._HLN_plot(fitdomain=fit_field,
+                params=params, unc=unc, axes=axes)
+
+        # Don't return transport graph object, user can pass axis to control graphing.
+        return params, unc
+    
+    def HLN_fit_iterative(self, axes=None, display=False, b_window=10,
+                          p0=[], bounds=([-1, 0, -np.infty], [1, np.infty, np.infty])):
+        
+        param_names = ["alpha", "lphi", "offset"]
+        assert len(p0) <= len(param_names)
+
+        # Setup intial parameters for fitting.
+        fit_kwargs = {}
+        for key, val in zip(param_names, p0):
+            fit_kwargs[key] = val
+        fit_kwargs["b_window"] = b_window
+        
+        # Perform fit
+        params, unc = localisation.WAL.fitting.HLN_fit_iterative(
+            B=self.field, sigmaxx=self.sigmaxx, **fit_kwargs)
+
+        # Graph if desired.
+        # either condition allows for plots to be generated.
+        if display or axes is not None:
+            # Recalculate the final fitting field.
+            Bphi = localisation.WAL.HLN_li_to_Hi(params[1])
+            Binds = np.where(np.abs(self.field) < fit_kwargs["b_window"] * Bphi)
+            fit_field = [np.min(self.field[Binds]), np.max(self.field[Binds])]
+            # Generate graph
+            tg = self._HLN_plot(fitdomain=fit_field,
+                params=params, unc=unc, axes=axes)
+
+        # Don't return transport graph object, user can pass axis to control graphing.
+        return params, unc
+    
+    def HLN_fit_const_alpha_iterative(self, alpha, axes=None, display=False, b_window=10,
+                                      p0=[], bounds=([0, -np.infty], [np.infty, np.infty])):
+
+        param_names = ["lphi", "offset"]
+        assert len(p0) <= len(param_names)
+        
+        # Setup intial parameters for fitting.
+        fit_kwargs = {}
+        for key, val in zip(param_names, p0):
+            fit_kwargs[key] = val
+        fit_kwargs["b_window"] = b_window
+        
+        # Perform fit
+        params, unc = localisation.WAL.fitting.HLN_fit_const_alpha_iterative(
+            B=self.field, sigmaxx=self.sigmaxx, alpha=alpha, bounds=bounds, **fit_kwargs)
+
+        # Graph if desired.
+        # either condition allows for plots to be generated.
+        if display or axes is not None:
+            # Recalculate the final fitting field.
+            Bphi = localisation.WAL.HLN_li_to_Hi(params[1])
+            Binds = np.where(np.abs(self.field) <
+                             fit_kwargs["b_window"] * Bphi)
+            fit_field = [np.min(self.field[Binds]), np.max(self.field[Binds])]
+            # Insert alpha into plot params, to properly plot.
+            params_plot = [alpha] + list(params)
+            unc_plot = [0] + list(unc)
+            # Generate graph
+            tg = self._HLN_plot(fitdomain=fit_field,
+                                       params=params_plot, unc=unc_plot, axes=axes)
+
+        # Don't return transport graph object, user can pass axis to control graphing.
+        return params, unc
+        
+
+
+class hallbar_measurement_symmetrised(hallbar_measurement):
+    """ Class to contain two sets of data, symmeteric and asymettric components.
+        Uses same functions as hallbar_measurement class, but applies to appropriate 
+        components of the symmetrised dataset instead.
+    """
+    
+    def __init__(self, sym, asym) -> None:
+        #Assertions
+        assert(isinstance(sym, hallbar_measurement))
+        assert(isinstance(asym, hallbar_measurement))
+        assert(np.all(sym.all_vars().shape == asym.all_vars().shape))
+        assert(np.all(sym.field == asym.field))
+        
+        #Copy 
+        self.sym = sym.copy()
+        self.asym = asym.copy()
+        
+        #Select class properties.
+        self.field = self.sym.field # field values (independent variable) should be the exact same.
+        self.rxx = self.sym.rxx # for a hall measurement, symmetric component is important
+        self.rhoxx = self.sym.rhoxx 
+        self.rxy = self.asym.rxy #for a hall measurement, asymmetric component is important.
+        self.rhoxy = self.asym.rhoxy
+        self.sigmaxx = self.sym.sigmaxx
+        self.sigmaxy = self.asym.sigmaxy
+        
+
+    @override
+    def copy(self):
+        return hallbar_measurement_symmetrised(self.sym, self.asym)
+
+    
+    @classmethod
+    @override
+    def reset_clr_counter(cls):
+        super(hallbar_measurement_symmetrised, cls).reset_clr_counter()
+        cls.clr_i = 0
+
+
+    
 # class hallbar_measurement_set():
 #     """Class to categorise, organise and graph multiple hallbar measurements"""
 #     # TODO impliment

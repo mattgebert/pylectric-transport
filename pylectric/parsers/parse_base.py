@@ -1,10 +1,11 @@
 from pylectric.geometries import fourprobe, hallbar
-from pylectric.signals import importing, conversion
+from pylectric.signals import importing, conversion, processing
 from pylectric.signals.importing import remove_duplicate_columns, arrange_by_label
 from io import TextIOWrapper
 import numpy as np
 import pandas as pd
 import abc
+import matplotlib.pyplot as plt
 
 class parserFile(metaclass=abc.ABCMeta):
     
@@ -157,6 +158,35 @@ class parserFile(metaclass=abc.ABCMeta):
         if updated:
             print("Updated data labels to match units change.")
             
+    def split_dataset_by_label_turning_point(self, label, max=True, endpoint_exclusion=0):
+        """Splits dataset if label exists within data.
+
+        Args:
+            label: Labels to apply function to.
+            max: Whether to search for a global maximum (True) or minimum (False) first.
+            endpoint_exclusion: A total percentage of the data to exclude from the search by trimming ends.
+
+        Raises:
+            AttributeError: Listed label doesn't exist in parser labels.
+        """
+        assert isinstance(self.data, np.ndarray)
+        assert isinstance(label, str)
+
+        # Check if labels exist within data labels for correct identification of data.
+        if label not in self.labels:
+            raise AttributeError(
+                str(label) + " does not exists within data labels.")
+        # Find list index
+        i = np.where(np.array(self.labels) == label)[0]
+        ds1,ds2 = processing.split_dataset_by_turning_point(self.data, colN=i, max=max,endpoint_exclusion=endpoint_exclusion)
+        
+        #Copy
+        newobj1 = self.copy()
+        newobj2 = self.copy()
+        newobj1.data = ds1
+        newobj2.data = ds2
+        
+        return newobj1, newobj2
 
     def v2r_cc(self, current, labels, updated_labels = False):
         """Converts a voltage to resistance, by knowing the constant current amount. Returns updated label."""
@@ -194,9 +224,87 @@ class parserFile(metaclass=abc.ABCMeta):
         args = [gain]
         self._applyToLabelledData(conversion.preamplifier.removeConstGain, labels, *args)
 
+    def add_offset(self, offset, labels):
+        args = [offset]
+        self._applyToLabelledData(conversion.preamplifier.addOffset, labels, *args)
+
     def remove_duplicate_cols(self):
         self._applyToDataAndLabels(remove_duplicate_columns)
         
     def arrange_by_label(self, labels_ref):
         args = [labels_ref]
         self._applyToDataAndLabels(arrange_by_label, *args)
+        
+    def get_label_index(self, label):
+        ind = None
+        for i in range(len(self.labels)):
+            if self.labels[i] == label:
+                if ind is None:
+                    ind = i
+                else:
+                    raise KeyError("`" + label + "' has multiple columns.")
+        if ind is not None:
+            return ind
+        else:
+            raise KeyError("`" + label + "' not found.")
+        
+    def data_by_labels(self, ref_labels = []):
+        if isinstance(ref_labels, str):
+            ref_labels = [ref_labels] #lasy approach to reduce lines.
+        if isinstance(ref_labels, list):
+            data = None
+            for label in ref_labels:
+                label_index = self.get_label_index(label)
+                if data is None:
+                    #initiate
+                    data = self.data[:,label_index]
+                else:
+                    #concatenate
+                    data = np.c_[data, self.data[:,label_index]]
+            if data is not None:
+                return data
+
+    def plot_all_data(self, i=None, label=None, ax=None, cpr=3, 
+                      scatter_kwargs={"s":0.1}):
+        if i is None and label is None:
+            i = 0
+        elif i is None:
+            i = self.get_label_index(label)
+            
+        datashape = self.data.shape
+        
+        assert len(datashape) > 1 #rows and columns
+        assert np.all(np.array(datashape) > 1) #multiple rows & columns
+        
+        newfig = False
+        if ax is not None:
+            if len(ax.shape) > 1:
+                np.prod(ax.shape) >= datashape[1]-1
+                fig = ax[0].get_figure()
+                rows = len(ax)
+                cpr = len(ax[0])
+            else:
+                fig = ax[0].get_figure()
+        else:    
+            rows = int(np.ceil((datashape[1]-1)/cpr))
+            fig, ax = plt.subplots(rows, cpr, figsize=(8, rows*2))
+            newfig=True
+        for j in range(datashape[1]):
+            if j != i:
+                k = j if j <= i else j-1 #new index for graphing.
+                if len(ax.shape) > 1:
+                    r = int(np.floor(k / cpr))
+                    c = k % cpr
+                    ax[r][c].scatter(self.data[:, i], self.data[:, j], **scatter_kwargs)
+                    ax[r][c].set_ylabel(self.labels[j])
+                    ax[r][c].set_xlabel(self.labels[i])
+                else:
+                    ax[k].scatter(self.data[:, i], self.data[:, j], **scatter_kwargs)
+                    ax[k].set_ylabel(self.labels[j])
+                    ax[k].set_xlabel(self.labels[i])
+        if newfig:
+            fig.tight_layout()
+        return fig
+
+
+

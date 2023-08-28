@@ -80,7 +80,9 @@ class preamplifier:
         
         return data / gain
 
-
+    def addOffset(data, offset) -> np.ndarray:
+        assert isinstance(data, np.ndarray)
+        return data + offset
 
 # class currentDrain():
     
