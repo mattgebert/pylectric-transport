@@ -58,27 +58,41 @@ class graphable_base(metaclass=ABCMeta):
         zz = None
         return zz
 
-    def all_vars(self):
+    @property
+    def data(self):
+        return np.c_[self.ind_vars(), self.dep_vars()]
+    
+    @property
+    def data_all(self):
         return np.c_[self.ind_vars(), self.dep_vars(), self.extra_vars()]
 
+    def all_vars(self): #redundant.
+        return self.data_all
+
+    @staticmethod
     def _plot_1Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_1Ddata(data, ax, scatter=False, **mpl_kwargs)
 
+    @staticmethod
     def _scatter_1Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_1Ddata(data, ax, scatter=True, **mpl_kwargs)
     
+    @staticmethod
     def _plot_2Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
 
+    @staticmethod
     def _scatter_2Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
 
+    @staticmethod
     def _plot_3Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
-
+    @staticmethod
     def _scatter_3Ddata(data, ax=None, **mpl_kwargs):
         return graphable_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
 
+    @staticmethod
     def _graph_1Ddata(data, ax=None, scatter=False, **mpl_kwargs):
         """Plots XY data in a 2D Numpy Array
 
@@ -112,7 +126,8 @@ class graphable_base(metaclass=ABCMeta):
         # tg.setDefaultTicks()
         
         return tg
-    
+
+    @staticmethod
     def _graph_2Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         """Plots 2D data, that is multiple dependent variables against a single independent variable.
 
@@ -169,6 +184,7 @@ class graphable_base(metaclass=ABCMeta):
                 
         return tg
     
+    @staticmethod
     def _graph_3Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         #TODO: update to match _plot_2Ddata methods... NOT WORKING.
         assert isinstance(data, np.ndarray)
@@ -198,6 +214,7 @@ class graphable_base(metaclass=ABCMeta):
 
         return tg
     
+    @staticmethod
     def _data_compatability(A,B):
         assert isinstance(A, np.ndarray)
         assert isinstance(B, np.ndarray)

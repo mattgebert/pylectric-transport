@@ -174,6 +174,10 @@ class hall2D():
 
         return rhoxy0 + rhoxy_hall
 
+    def hall_mobility(hall_density, rxx_b0):
+        mu_hall = 1/(sc.e * hall_density * rxx_b0)
+        return mu_hall
+
     def hall_measurement_fit(field, rxy, rxx):
         """Returns a tuple of three parameters after fitting a hall resistance contribution.
             - Hall density, a measurement of the device carrier density

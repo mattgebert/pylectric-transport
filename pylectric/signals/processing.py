@@ -66,7 +66,6 @@ def reduction_interpolate(data, step, colN=0, linear=True):
     # Get Max/Min
     nmax = np.amax(data[:, colN])
     nmin = np.amin(data[:, colN])
-    print(1,nmin,nmax)
 
     # number of new points
     # As using bins (ie, half width either side of x), only require rounding, not floor/ceiling.
@@ -75,7 +74,6 @@ def reduction_interpolate(data, step, colN=0, linear=True):
     N = Nupper - Nlower
     # Setup new colN
     x = np.linspace(Nlower * step, Nupper * step, N+1)
-    print(2,x[0],x[-1])
     
     if type(step) != int and step % 1 != 0:
         # Caculate step precision.
@@ -415,7 +413,6 @@ def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarra
         # Redistribute
         full_sym = np.r_[sym[::-1,], sym[0::]] 
         full_asym = np.r_[-asym[::-1,], asym[0::]] 
-        
     
     # Restore independent variable
     full_sym[:, colN] = data[:, colN]
@@ -424,7 +421,7 @@ def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarra
     asym[:, colN] = data[dhalf:, colN]
     
     if full_domain:
-        return full_sym, full_asym
+        return full_sym,full_asym
     else:
         return sym, asym
 

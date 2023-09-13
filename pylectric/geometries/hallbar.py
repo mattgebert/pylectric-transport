@@ -10,6 +10,7 @@ from scipy import optimize as opt
 import pylectric
 from pylectric.graphing import geo_base, graphwrappers
 from pylectric.analysis import mobility, hall, localisation
+from pylectric.signals import processing
 # Programming Syntax & annotations #2
 import warnings
 from overrides import override
@@ -60,7 +61,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         self.field = field.copy()
         self.rxx = rxx.copy()
         self.rxy = rxy.copy()
-        self.geom = geom
+        self._geom = geom
         
         # Convert rxx, rxy to rhoxx, rhoxy, sigmaxx, sigmaxy
         self._calculateTransport()
@@ -76,11 +77,20 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
     
     def _calculateTransport(self):
         # Convert rxx, rxy to rhoxx, rhoxy, sigmaxx, sigmaxy
-        self.rhoxx = self.rxx.copy() * self.geom
-        self.rhoxy = self.rxy.copy() * self.geom
+        self.rhoxx = self.rxx.copy() * self._geom
+        self.rhoxy = self.rxy.copy() * self._geom
         self.sigmaxx = self.rhoxx / (self.rhoxx**2 + self.rhoxy**2)
         self.sigmaxy = -self.rhoxy / (self.rhoxx**2 + self.rhoxy**2)
         
+    
+    @property
+    def geom(self):
+        return self._geom
+    
+    @geom.setter
+    def geom(self, geom):
+        self._geom = geom
+        self._calculateTransport() #update transport values.
     
     def symmterise(self, full_domain=False) -> tuple[hallbar_measurement, hallbar_measurement]:
         """_summary_
@@ -107,7 +117,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         all_data = self.all_vars()
         
         #Symmmetrise all data:
-        sym, asym = pylectric.signals.processing.symmetrise(all_data, colN=0, full_domain=full_domain) #field = 0
+        sym, asym = processing.symmetrise(all_data, colN=0, full_domain=full_domain) #field = 0
         
         #Reassign datasets:
         sym_clone.field = sym[:,0]
@@ -130,7 +140,8 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         return sym_clone, asym_clone
     
     def copy(self):
-        newobj = hallbar_measurement(field=self.field, rxx=self.rxx, rxy=self.rxy)
+        newobj = hallbar_measurement(field=self.field, rxx=self.rxx, rxy=self.rxy, 
+                    geom=self._geom)
         newobj.dataseries = self.dataseries.copy()
         for key in newobj.dataseries:
             newobj.dataseries[key] = newobj.dataseries[key].copy()
@@ -138,7 +149,8 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         newobj.rhoxy = self.rhoxy.copy()
         newobj.sigmaxx = self.sigmaxx.copy()
         newobj.sigmaxy = self.sigmaxy.copy()
-        newobj.geom = self.geom
+        # newobj.geom = self._geom --> Could do this,
+        # then would need to calculate transport again. Instead add to constructor...
         newobj.params = self.params.copy()
         return newobj
     
@@ -161,7 +173,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
             raise TypeError("'" + str(x) + "' is not a hallbar_measurement object.")
         else:
             # check identical parameter lists:
-            if self.geom != x.geom:
+            if self._geom != x.geom:
                 raise AttributeError("Geometry of " + str(x) + " doesn't match " + str(self))
             xkeys = list(x.dataseries.keys())
             for key1 in self.dataseries.keys():
@@ -224,8 +236,10 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
     def plot_dep_vars(self, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
         tg = super().plot_dep_vars(axes, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
-        tg.yResistivity(i=0, subscript="xx")
-        tg.yResistivity(i=1, subscript="xy")
+        # tg.yResistivity(i=0, subscript="xx")
+        # tg.yResistivity(i=1, subscript="xy")
+        tg.yResistance(i=0, subscript="xx")
+        tg.yResistance(i=1, subscript="xy")
         return tg
 
     @override
@@ -234,7 +248,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
 
     @override
     def dep_vars(self):
-        return np.c_[self.rhoxx, self.rhoxy]
+        return np.c_[self.rxx, self.rxy] #should match constructor, 
     
     @override
     def plot_all_dataseries(self, ax=None, scatter=False, **mpl_kwargs):
@@ -252,13 +266,115 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
     def plot_dataseries_with_dep_vars(self, key, ax=None, scatter=False, **mpl_kwargs):
         tg = super().plot_dataseries_with_dep_vars(key, ax, scatter, **mpl_kwargs)
         tg.xFieldT(i=-1)
-        tg.yResistivity(i=0, subscript="xx")
-        tg.yResistivity(i=1, subscript="xy")
+        # tg.yResistivity(i=0, subscript="xx")
+        # tg.yResistivity(i=1, subscript="xy")
+        tg.yResistance(i=0, subscript="xx")
+        tg.yResistance(i=1, subscript="xy")
         return tg
     
     @override
     def to_DataFrame(self):
         return pd.DataFrame(self.all_vars(), columns=["Field","$\rho_{xx}$","$\rho_{xy}$"] + list(self.dataseries.keys()))
+
+    @staticmethod
+    def _1D_plots(data, axes=None, scatter=False, **mpl_kwargs):
+        tg = hallbar_measurement._graph_2Ddata(
+            data, axes, scatter, **mpl_kwargs)
+        tg.xFieldT(i=-1)
+        return tg
+
+    def plot_resistance(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rhoxx, self.rhoxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistivity(i=0, subscript="xx")
+        tg.yResistivity(i=1, subscript="xy")
+        return tg
+
+    def plot_resistance_xx(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rxx]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistance(i=0, subscript="xx")
+        return tg
+    
+    def plot_resistance_xy(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistance(i=0, subscript="xy")
+        return tg
+    
+    def plot_resistivity(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rhoxx, self.rhoxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistivity(i=0, subscript="xx")
+        tg.yResistivity(i=1, subscript="xy")
+        return tg
+    
+    def plot_resistivity_xx(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rhoxx]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistivity(i=0, subscript="xx")
+        return tg
+
+    def plot_resistivity_xy(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.rhoxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yResistivity(i=0, subscript="xy")
+        return tg
+    
+    def plot_conductivity(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.sigmaxx, self.sigmaxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yConductivity(i=0, subscript="xx")
+        tg.yConductivity(i=1, subscript="xy")
+        return tg
+    
+    def plot_conductivity_xx(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.sigmaxx]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yConductivity(i=0, subscript="xx")
+        return tg
+
+    def plot_conductivity_xy(self, axes=None, scatter=False, **mpl_kwargs):
+        data = np.c_[self.field, self.sigmaxy]
+        tg = hallbar_measurement._1D_plots(data, axes, scatter, **mpl_kwargs)
+        tg.yConductivity(i=0, subscript="xy")
+        return tg
+
+    def plot_R(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistance"""
+        return self.plot_resistance(axes=axes, scatter=scatter, **mpl_kwargs)
+    
+    def plot_Rxx(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistance_xx"""
+        return self.plot_resistance_xx(axes=axes, scatter=scatter, **mpl_kwargs)
+    
+    def plot_Rxy(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistance_xy"""
+        return self.plot_resistance_xy(axes=axes, scatter=scatter, **mpl_kwargs)
+    
+    def plot_rho(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistivity"""
+        return self.plot_resistivity(axes=axes, scatter=scatter, **mpl_kwargs)
+    
+    def plot_rhoxx(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistivity_xx"""
+        return self.plot_resistivity_xx(axes=axes, scatter=scatter, **mpl_kwargs)
+
+    def plot_rhoxy(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_resistivity_xy"""
+        return self.plot_resistivity_xy(axes=axes, scatter=scatter, **mpl_kwargs)
+
+    def plot_sigma(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_conductivity"""
+        return self.plot_conductivity(axes=axes, scatter=scatter, **mpl_kwargs)
+
+    def plot_sigmaxx(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_conductivity_xx"""
+        return self.plot_conductivity_xx(axes=axes, scatter=scatter, **mpl_kwargs)
+
+    def plot_sigmaxy(self, axes=None, scatter=False, **mpl_kwargs):
+        """Alias for plot_conductivity_xy"""
+        return self.plot_conductivity_xy(axes=axes, scatter=scatter, **mpl_kwargs)
 
     def MR_percentages(self):
         # Get zero field location
@@ -423,7 +539,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         ax.legend()
         return tg
         
-    def hall_measurement_fit(self, thickness=None, field_range = (None, None), 
+    def hall_measurement_fit(self, thickness=None, field_range = (None, None),
                              axes=None, display=False, fit_kwargs={}):
         """ Uses object Field, Rxx and Rxy to fit the following hall parameters:
         - Hall Density N_hall (m^{-3} or m^{-2})
@@ -523,9 +639,10 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
 
         # Find minimum field value
         minind = np.where(np.abs(ssfield) == np.min(np.abs(ssfield)))
-        sigmaxx_b0 = np.average(self.sigmaxx[minind])
+        sigmaxx_b0 = np.average(self.sigmaxx[minind]) #Before new fn.
         # remove zerofield offset within subset data.
         dsigmaxx = self.sigmaxx - sigmaxx_b0
+            
         # Plot raw data according to subset offset. Only plot data less than 3x fitdomain[1].
         if np.max(np.abs(self.field)) < 3 * np.max(np.abs(fitdomain)):
             #no need to select subset of scattered data.
@@ -647,8 +764,9 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         # Don't return transport graph object, user can pass axis to control graphing.
         return params, unc
     
-    def HLN_fit_iterative(self, axes=None, display=False, b_window=10,
-                          p0=[], bounds=([-1, 0, -np.infty], [1, np.infty, np.infty])):
+    def HLN_fit_iterative(self, axes=None, display=False, 
+                          b_window=10, 
+                          p0=[0.5,1e-7,0], bounds=([-1, 0, -np.infty], [1, np.infty, np.infty])):
         
         param_names = ["alpha", "lphi", "offset"]
         assert len(p0) <= len(param_names)
@@ -658,6 +776,7 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         for key, val in zip(param_names, p0):
             fit_kwargs[key] = val
         fit_kwargs["b_window"] = b_window
+        fit_kwargs["bounds"] = bounds
         
         # Perform fit
         params, unc = localisation.WAL.fitting.HLN_fit_iterative(
@@ -711,6 +830,142 @@ class hallbar_measurement(geo_base.graphable_base_dataseries):
         # Don't return transport graph object, user can pass axis to control graphing.
         return params, unc
         
+    def HLN_LMR_fit_iterative(self, axes=None, display=False,
+                        b_window=10, p0=[0.5, 1e-7], 
+                        bounds=([-2, 0], [2, np.infty])):
+
+        param_names = ["alpha", "lphi"]
+        assert len(p0) <= len(param_names)
+
+        # Setup intial parameters for fitting.
+        fit_kwargs = {}
+        for key, val in zip(param_names, p0):
+            fit_kwargs[key] = val
+        fit_kwargs["b_window"] = b_window
+        fit_kwargs["bounds"] = bounds
+
+        # Perform fit
+        params, unc = localisation.WAL.fitting.HLN_LMR_fit_iterative(
+            B=self.field, sigmaxx=self.sigmaxx, **fit_kwargs)
+
+        # Graph if desired.
+        # either condition allows for plots to be generated.
+        if display or axes is not None:
+            # Recalculate the final fitting field.
+            Bphi = localisation.WAL.HLN_li_to_Hi(params[1])
+            Binds = np.where(np.abs(self.field) <
+                             fit_kwargs["b_window"] * Bphi)
+            fit_field = [np.min(self.field[Binds]), np.max(self.field[Binds])]
+            # Generate graph
+            tg = self._HLN_LMR_plot(params=params, unc=unc, 
+                                    axes=axes, fitdomain=fit_field)
+
+        # Don't return transport graph object, user can pass axis to control graphing.
+        return params, unc
+
+    def _HLN_LMR_plot(self,params, unc,
+                   fitdomain=None, axes=None):
+        
+        # Setup kwargs for WAL function
+        WAL = localisation.WAL #library..
+        WAL_LMRfn = WAL.HLN_LMR
+        WALfn = WAL.HLN
+        LMRfn = WAL.sigma_LMR
+        alpha, lphi, grad, R0 = params
+        
+        # Plot two graphs; conductance (abs) and the WAL fitting.
+        if axes:
+            assert len(axes) >= 2 #needs two graphs.
+            ax = axes
+            fig = ax[0].get_figure()
+        else:
+            fig, ax = plt.subplots(2,1, figsize=(12,10))
+        
+        ### FIRST PART - LMR Reduction
+        # Plot raw datapoints on each
+        ax[0].scatter(self.field, self.sigmaxx, label="Data", s=0.1)
+        
+        # Plot fits on each
+        x = np.linspace(np.min(self.field), np.max(self.field), 1000)
+        ax[0].plot(x, WAL_LMRfn(x, *params), 
+                   label="Fit WAL + LMR")
+        diff_HLN_LMR = WALfn(x[-1], *params[0:2]) # WAL component at high field (-ve)
+        ax[0].plot(x, LMRfn(x, *params[2:]) + diff_HLN_LMR, # add it
+                   "--", label="Fit LMR")  # Plot LMR fit
+                
+        ### SECOND PART - WAL FITTING 
+        # calculate data dsigmaxx by removing LMR of fit.
+        dsigmaxx = self.sigmaxx - LMRfn(self.field, *params[2:])
+        
+        # Get raw data inside fit subset
+        if fitdomain is None:
+            #default to regular field
+            fitdomain = [np.min(self.field), np.max(self.field)] 
+
+        # Plot raw data according to subset offset. Only plot data less than 2x fitdomain[1].
+        if np.max(np.abs(self.field)) < 2 * np.max(np.abs(fitdomain)):
+            # no need to select subset of scattered data.
+            scatfield = self.field
+            scatsig = dsigmaxx
+        else:
+            # display subset of scattered data.
+            scatinds = np.where(np.abs(self.field) < 2 *
+                                np.max(np.abs(fitdomain)))
+            scatfield = self.field[scatinds]
+            scatsig = dsigmaxx[scatinds]
+        hm = hallbar_measurement # Use class var for plotting
+        ax[1].scatter(scatfield, scatsig, label="Data (- LMR)", s=0.3,
+                   c=hm.COLS[hm.clr_i % len(hm.COLS)])
+        hm.clr_i += 1
+
+        # Plot Fit line outside display domain with dashes.
+        dashinds = np.where(np.abs(scatfield) > np.max(np.abs(fitdomain)))
+        if len(dashinds[0] > 0):
+            dashdomain = [np.min(scatfield[dashinds]),
+                          np.max(scatfield[dashinds])]
+            # dashx = np.linspace(dashdomain[0], dashdomain[1], 400)
+            dashx = [dashdomain[0], dashdomain[1]]
+            dashsigmaxx = WALfn(dashx, *params[:2])
+            ax[1].plot(dashx, dashsigmaxx, "--",
+                    c=hm.COLS[hm.clr_i % len(hm.COLS)])
+
+        # Plot Fit Line over display domain. Needs more points than just a line haha.
+        x = np.linspace(fitdomain[0], fitdomain[1], 400)
+        fitsigmaxx = WALfn(x, *params[:2])
+        ax[1].plot(x, fitsigmaxx, label="Fit (WAL)",
+                c=hm.COLS[hm.clr_i % len(hm.COLS)])
+
+        # Plot Fit Domain Endpoints
+        fit_sigmaxx = WALfn(fitdomain, *params[:2])
+        ax[1].scatter(fitdomain, fit_sigmaxx, marker='|', s=100,
+                   c=hm.COLS[hm.clr_i % len(hm.COLS)])
+
+        hm.clr_i += 1
+        ax[0].set_xlabel("Field (T)")
+        ax[1].set_xlabel("Field (T)")
+        ax[0].set_ylabel(r"$\sigma_{xx}$ (S)")
+        ax[1].set_ylabel(r"$\sigma_{xx}$ (S)")
+        ax[1].set_title("WAL Fit")
+
+        # Display Fit Values on Graph:
+        strvals = ["{:1.2E} $\pm$ {:1.2E}".format(
+            Decimal(params[i]), Decimal(unc[i])) for i in range(len(params))]
+
+        # dim = 2 if self.thickness is None else 3
+        # strdim = str(dim)
+        ann_str = r"$\alpha$: " + strvals[0] +\
+            "\n" + r"$\ell_{\phi}$: " + strvals[1] + r" m" +\
+            "\n" + r"Grad = " + strvals[2] + r" $\Omega T^{-1}$" +\
+            "\n" + r"$R0$ = " + strvals[3] + r" $\Omega$"
+
+        anchor = AnchoredText(
+            ann_str, loc=2 if params[0] < 0 else 3, prop={"fontsize": 6})
+        ax[1].add_artist(anchor)
+
+        # Legend
+        ax[1].legend()
+        
+        return fig, ax
 
 
 class hallbar_measurement_symmetrised(hallbar_measurement):
