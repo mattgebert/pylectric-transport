@@ -4,8 +4,10 @@ from matplotlib import ticker
 import numpy as np
 from . import geo_base, journals
 
-class scalable_graph():
+class scalable_graph(mpl.Figure):
     _exponent_to_prefix = {
+    """Constants of prefixes for axes labels.
+    """
         -21: "z",
         -18: "a",
         -15: "f",
@@ -43,6 +45,7 @@ class scalable_graph():
         "Z": 21,
         "Y": 24
     }
+
     def __init__(self, axfig) -> None:
         """_summary_
         Args:
