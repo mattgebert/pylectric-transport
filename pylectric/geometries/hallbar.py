@@ -8,9 +8,10 @@ import matplotlib.colors as mcolors
 from scipy import optimize as opt
 # Custom Libraries
 import pylectric
-from pylectric.graphing import geo_base, graphwrappers
+from pylectric.graphing import graphwrappers
 from pylectric.analysis import mobility, hall, localisation
 from pylectric.signals import processing
+from pylectric.geometries import geo_base
 # Programming Syntax & annotations #2
 import warnings
 from overrides import override

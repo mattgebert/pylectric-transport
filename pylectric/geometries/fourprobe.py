@@ -4,8 +4,9 @@ import matplotlib.pyplot as plt
 from scipy import optimize as opt
 # Custom Libraries
 import pylectric
-from pylectric.graphing import geo_base, graphwrappers
+from pylectric.graphing import graphwrappers
 from pylectric.analysis import mobility
+from pylectric.geometries import geo_base
 # Programming Syntax
 import warnings
 from overrides import override
