@@ -10,61 +10,301 @@ import numpy as np
 from enum import Enum
 import pandas as pd
 
-class graphable_base(metaclass=ABCMeta):
-    """Class to expand and bind graphing functions to geometric objects.
-
+class transport_base(metaclass=ABCMeta):
+    """ An abstract class to expand and bind graphing functions to geometric objects.
+        All data is timeseries data, represented by rows for various variable columns.
+        Data also should implement a sweep direction to plot.
+        Graphical objects exist for scatter, plot, 
     """
     
     class sweep_enum(Enum):
-        """Tracks sweeping direction for the class"""
+        """Tracks sweeping direction for the class
+
+        Parameters
+        ----------
+        Enum : enum.Enum
+            Enumerate to track sweep direction in a dataset.
+        """
+        
         UNDEFINED = 0
-        FORWARD = 1
-        BACKWARD = 2
+        POSITIVE = 1 # +ve change in ind. var.
+        NEGATIVE = 2 # -ve change in ind. var.
     
     def __init__(self) -> None:
+        """Initalizes base transport class. 
+        Requires implementation of sweep direction with independent variable(s).
+        """
         # if not hasattr(self, "data"):
             # raise AttributeError("No data passed to constructor.")
         super().__init__()
-        self.sweep_dir = self.sweep_enum.UNDEFINED #TODO: implement definition of sweep direction upon data addition...
-        return None
+        
+        #Sweep Dir
+        self.sweep_dir = None
+        self.mask = None
+        self._x = None
+        self._xerrs = None
+        self._xlabels = None
+        self._y = None
+        self._yerrs = None
+        self._ylabels = None
+        self._z = None
+        self._zerrs = None
+        self._zlabels = None
+        return
+
+    def __copy__(self):
+        """Creates a deep clone of base datasets.
+
+        Returns
+        -------
+        transport_base
+            _description_
+        """
+        clone = object.__new__(type(self))
+        clone.sweep_dir = self.sweep_dir
+        clone.mask = self.mask.copy() if self.mask is not None else None
+        # X
+        clone._x = self._x.copy() if self._x is not None else None
+        clone._xerrs = self._xerrs.copy() if self._xerrs is not None else None
+        clone._xlabels = self._xlabels.copy() if self._xlabels is not None else None
+        # Y
+        clone._y = self._y.copy() if self._y is not None else None
+        clone._yerrs = self._yerrs.copy() if self._yerrs is not None else None
+        clone._ylabels = self._ylabels.copy() if self._ylabels is not None else None
+        # Z
+        clone._z = self._z.copy() if self._y is not None else None
+        clone._zerrs = self._zerrs.copy() if self._zerrs is not None else None
+        clone._zlabels = self._zlabels.copy() if self._zlabels is not None else None
+        return clone
 
     @abstractmethod
-    def ind_vars(self):
-        """Returns the independent variable.
+    @property
+    def x(self) -> tuple[np.ndarray, np.ndarray]:
+        """Returns the independent variable(s).  
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        """
+        return (self._x, self._xerrs)
+        
+    @abstractmethod
+    @x.setter
+    def x(self, vars: np.ndarray|tuple[np.ndarray,np.ndarray]|tuple[np.ndarray, np.ndarray, list]) -> None:
+        """Sets values for the independent variable(s). 
+        X-errors are set to None if not provided at the same time.
+
+        Parameters
+        ----------
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for x, or a tuple with (x, xerr) or (x, xerr, xlabels).
+            If labels is not provided, new x must match existing labels length.
+        """
+        if isinstance(vars, np.ndarray):
+            self._x = vars.copy()
+            self._xerrs = None
+            return
+        elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
+            self._x = vars[0].copy()
+            l = len(vars)
+            if l == 1:
+                return
+            elif isinstance(vars[1], np.ndarray):
+                self._xerrs = vars[1].copy()
+                if l == 2:
+                    return
+                elif l == 3 and isinstance(vars[2], list):
+                    self._xerrs = vars[1]
+                    self._xlabels = vars[2]
+                    return
+        raise TypeError("Set either with a np.ndarray or a tuple with (x, xerr) or (x, xerr, xlabels).")
+    
+    @property
+    def independent_vars(self) -> tuple[np.ndarray, np.ndarray]:
+        """Alias for x. Returns the independent variable(s).
 
         Returns:
-            Numpy array: A 1D data array, for the independent variable related to the object.
+            (numpy.ndarray, numpy.ndarray): A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        xx=None
-        return xx
+        return self.x()
+    
+    @independent_vars.setter
+    def independent_vars(self, vars: np.ndarray|tuple[np.ndarray,np.ndarray]|tuple[np.ndarray, np.ndarray, list]) -> None:
+        """Alias for x. Sets values for the independent variable(s). 
+        X-errors are set to None if not provided at the same time.
+
+        Parameters
+        ----------
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for x, or a tuple with (x, xerr) or (x, xerr, xlabels).
+            If labels is not provided, new x must match existing labels length.
+        """
+        self.x(vars=vars)
+        return
     
     @abstractmethod
-    def dep_vars(self):
-        """Returns the dependent variables
+    @property
+    def y(self) -> tuple[np.ndarray, np.ndarray]:
+        """Returns the dependent variable(s).  
 
-        Returns:
-            Numpy array: A 2D data array of the dependent variables related to the object. Must match length of ind_vars
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        yy = None
-        return yy
+        return (self._y, self._yerr)
+    
+    @abstractmethod
+    @y.setter
+    def y(self, vars, labels=None, errs=None) -> None:
+        
+        """Sets values for the dependent variable(s).
+
+        Parameters
+        ----------
+        vars : np.ndarray
+            A 2D data array. If labels not provided, must match existing labels length.
+        labels : list, optional
+            A list of string labels, must match vars length, by default None.
+        errs : np.ndarray, optional
+            A 2D data array, corresponding to errors of vars, by default None.
+        """
+        return
+    
+    @property
+    def dependent_vars(self) -> tuple[np.ndarray, np.ndarray]:
+        """Alias for y. Returns the dependent variables. These are the primary variables of the class.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        """
+        return self.y()
+    
+    @dependent_vars.setter
+    def dependent_vars(self, vars, labels=None, errs=None) -> None:
+        """Alias for y. Sets values for the dependent variable(s).
+
+        Parameters
+        ----------
+        vars : np.ndarray
+            A 2D data array. If labels not provided, must match existing labels length.
+        labels : list, optional
+            A list of string labels, must match vars length, by default None.
+        errs : np.ndarray, optional
+            A 2D data array, corresponding to errors of vars, by default None.
+        """
+        return self.y(vars=vars, labels=labels, errs=errs)
 
     @abstractmethod
-    def extra_vars(self):
-        """Returns additional dependent variables
+    @property
+    def z(self):
+        """Returns the extra dependent variable(s), of lesser importance.
 
-        Returns:
-            Numpy array: A 2D data array of the dependent variables related to the object. Must match length of ind_vars
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        zz = None
-        return zz
+        
+        z = None
+        zerr = None
+        
+        return (z, zerr)
+    
+    @abstractmethod
+    @z.setter
+    def z(self, vars, labels=None, errs=None) -> None:
+        
+        """Sets values for the extra dependent variable(s).
+
+        Parameters
+        ----------
+        vars : numpy.ndarray
+            A 2D data array. If labels not provided, must match existing labels length.
+        labels : list, optional
+            A list of string labels, must match vars length, by default None.
+        errs : np.ndarray, optional
+            A 2D data array, corresponding to errors of vars, by default None.
+        """
+        return 
+
 
     @property
-    def data(self):
-        return np.c_[self.ind_vars(), self.dep_vars()]
+    def extra_vars(self) -> tuple[np.ndarray, np.ndarray]:
+        """Alias for z. Returns the extra dependent variable(s), of lesser importance.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        """
+        return self.z()
+    
+    @extra_vars.setter
+    def extra_vars(self, vars, labels=None, errs=None) -> None:
+        """Alias for z. Sets values for the extra dependent variable(s).
+
+        Parameters
+        ----------
+        vars : np.ndarray
+            A 2D data array. If labels not provided, must match existing labels length.
+        labels : list, optional
+            A list of string labels, must match vars length, by default None.
+        errs : np.ndarray, optional
+            A 2D data array, corresponding to uncertainty of vars, by default None.
+        """
+        return self.z(vars=vars, labels=labels, errs=errs)
+
+    @property
+    def data(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+        """Returns independent and dependent variables, but not extra-dependent variables.
+
+        Returns
+        -------
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple with elements corresponding to values and uncertainty ((x,y), (xerr,yerr)).
+            Each element is a tuple corresponding to independent and dependent variables.
+            
+        """
+        x, xerr = self.x()
+        y, yerr = self.y()
+        return ((x,y), (xerr,yerr))
+    
+    @data.setter
+    def data(self, x, y, xerr=None, yerr=None, xlabels=None, ylabels=None) -> None:
+        """Sets independent and dependent variables, but not extra-dependent variables.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Independent variables.
+        y : np.ndarray
+            Dependent variables.
+        xerr : np.ndarray, optional
+            Independent errors, corresponding to x, by default None
+        yerr : _type_, optional
+            _description_, by default None
+        xlabels : _type_, optional
+            _description_, by default None
+        ylabels : _type_, optional
+            _description_, by default None
+        """
+        self.x(x, errs=xerr, labels=xlabels)
+        self.y = 
+        
+        return
     
     @property
     def data_all(self):
-        return np.c_[self.ind_vars(), self.dep_vars(), self.extra_vars()]
+        """ Equivalent to independent variables, dependent variables and extra variables.
+
+        Returns:
+            (np.ndarray, np.ndarray, np.ndarray): 
+        """
+        return np.c_[self.x(), self.y(), self.z()]
 
     def all_vars(self): #redundant.
         return self.data_all
@@ -334,7 +574,7 @@ class graphable_base(metaclass=ABCMeta):
     def to_DataFrame(self):
         return pd.DataFrame(self.all_vars())
 
-class graphable_base_dataseries(graphable_base):
+class transport_base_dataseries(transport_base):
     def __init__(self, dataseries) -> None:
         self.dataseries = {}
         for key, value in dataseries.items():

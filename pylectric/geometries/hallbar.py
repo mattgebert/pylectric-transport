@@ -21,7 +21,7 @@ from decimal import Decimal
 from matplotlib.offsetbox import AnchoredText
 import pandas as pd
 
-class hallbar_measurement(geo_base.graphable_base_dataseries):
+class hallbar_measurement(geo_base.transport_base_dataseries):
     """Class for a hall measurement, that is magnetic field dependence of Rxx and Rxy of a device.
         Does not assume gated geometry, however does assume magnetic measurement for the purpose of Rxy data.
         Geom parameter converts resistance to resistivity. Ie. Rho = R * Geom
