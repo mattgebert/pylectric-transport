@@ -338,13 +338,13 @@ class transport_base(metaclass=ABCMeta):
     
     @data.setter
     def data(self, vars: tuple[np.ndarray, np.ndarray] |
-             tuple[tuple[np.ndarray, np.ndarray],tuple[np.ndarray, np.ndarray]] |
-             tuple[tuple[np.ndarray, np.ndarray, list],tuple[np.ndarray, np.ndarray, list]]) -> None:
+             tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] |
+             tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]) -> None:
         """Sets independent and dependent variables, but not extra-dependent variables.
 
         Parameters
         ----------
-        vars : tuple[np.ndarray, np.ndarray] | tuple[tuple[np.ndarray, np.ndarray],tuple[np.ndarray, np.ndarray]] | tuple[tuple[np.ndarray, np.ndarray, list],tuple[np.ndarray, np.ndarray, list]]
+        vars : tuple[np.ndarray, np.ndarray] | tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] | tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]
             Tuple of values (X, Y). 
             X and Y can be np.ndarrays, or tuples with (x, xerr) or (x, xerr, xlabel)
             If labels is not provided, new x/y columns must match existing labels length.
@@ -354,25 +354,44 @@ class transport_base(metaclass=ABCMeta):
             # Use setters for X and Y.
             self.x(X)
             self.y(Y)
-            
         else:
             raise TypeError("Data setting requires a tuple (X,Y) of length 2. X/Y can be a np.ndarray, or a tuple with (x, xerr) or (x, xerr, xlabels).")
-        
         return
     
 
     
     @property
-    def data_all(self):
+    def data_all(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
         """ Equivalent to independent variables, dependent variables and extra variables.
 
-        Returns:
-            (np.ndarray, np.ndarray, np.ndarray): 
+        Returns
+        -------
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple with elements corresponding to values and uncertainty ((x,y), (xerr,yerr)).
+            Each element is a tuple corresponding to independent and dependent variables.
+            
         """
-        return np.c_[self.x(), self.y(), self.z()]
+        x, xerr = self.x
+        y, yerr = self.y
+        z, zerr = self.z
+        return ((x,y,z), (xerr,yerr,zerr))
 
-    def all_vars(self): #redundant.
-        return self.data_all
+    @data_all.setter
+    def data_all(self, vars:tuple[np.ndarray, np.ndarray, np.ndarray] |
+             tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] |
+             tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]) -> None:
+        if isinstance(vars, tuple) and len(vars) == 3:
+            X,Y,Z = vars
+            # Use setters for X,Y,Z
+            self.x(X)
+            self.y(Y)
+            self.z(Z)
+        else:
+            raise TypeError("Data setting requires a tuple (X,Y,Z) of length 3. X/Y/Z can be a np.ndarray, or a tuple with (x, xerr) or (x, xerr, xlabels).")
+        return
+
+    def all_vars(self):
+        return self.data_all()
 
     @staticmethod
     def _plot_1Ddata(data, ax=None, **mpl_kwargs):
