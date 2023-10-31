@@ -91,7 +91,7 @@ class transport_base(metaclass=ABCMeta):
         
     @abstractmethod
     @x.setter
-    def x(self, vars: np.ndarray|tuple[np.ndarray,np.ndarray]|tuple[np.ndarray, np.ndarray, list]) -> None:
+    def x(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Sets values for the independent variable(s). 
         X-errors are set to None if not provided at the same time.
 
@@ -100,6 +100,11 @@ class transport_base(metaclass=ABCMeta):
         vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
             2D array with values for x, or a tuple with (x, xerr) or (x, xerr, xlabels).
             If labels is not provided, new x must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
         if isinstance(vars, np.ndarray):
             self._x = vars.copy()
@@ -118,6 +123,12 @@ class transport_base(metaclass=ABCMeta):
                     self._xerrs = vars[1]
                     self._xlabels = vars[2]
                     return
+        #         else:
+        #             raise TypeError("X[2] doesn't match a list of strings, required for setting labels.")
+        #     else:
+        #         raise TypeError("X[1] doesn't match a np.ndarray, required for setting errors.")
+        # else:
+        #     raise TypeError("X doesn't match either a np.ndarray, or a tuple with X[0] as a np.ndarray.")
         raise TypeError("Set either with a np.ndarray or a tuple with (x, xerr) or (x, xerr, xlabels).")
     
     @property
@@ -130,7 +141,7 @@ class transport_base(metaclass=ABCMeta):
         return self.x()
     
     @independent_vars.setter
-    def independent_vars(self, vars: np.ndarray|tuple[np.ndarray,np.ndarray]|tuple[np.ndarray, np.ndarray, list]) -> None:
+    def independent_vars(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Alias for x. Sets values for the independent variable(s). 
         X-errors are set to None if not provided at the same time.
 
@@ -139,6 +150,11 @@ class transport_base(metaclass=ABCMeta):
         vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
             2D array with values for x, or a tuple with (x, xerr) or (x, xerr, xlabels).
             If labels is not provided, new x must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
         self.x(vars=vars)
         return
@@ -153,24 +169,49 @@ class transport_base(metaclass=ABCMeta):
         tuple[np.ndarray, np.ndarray]
             A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        return (self._y, self._yerr)
+        return (self._y, self._yerrs)
     
     @abstractmethod
     @y.setter
-    def y(self, vars, labels=None, errs=None) -> None:
+    def y(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         
         """Sets values for the dependent variable(s).
 
         Parameters
         ----------
-        vars : np.ndarray
-            A 2D data array. If labels not provided, must match existing labels length.
-        labels : list, optional
-            A list of string labels, must match vars length, by default None.
-        errs : np.ndarray, optional
-            A 2D data array, corresponding to errors of vars, by default None.
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for y, or a tuple with (y, yerr) or (y, yerr, ylabels).
+            If labels is not provided, new y must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
-        return
+        if isinstance(vars, np.ndarray):
+            self._y = vars.copy()
+            self._yerrs = None
+            return
+        elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
+            self._y = vars[0].copy()
+            l = len(vars)
+            if l == 1:
+                return
+            elif isinstance(vars[1], np.ndarray):
+                self._yerrs = vars[1].copy()
+                if l == 2:
+                    return
+                elif l == 3 and isinstance(vars[2], list):
+                    self._yerrs = vars[1]
+                    self._ylabels = vars[2]
+                    return
+        #         else:
+        #             raise TypeError("Y[2] doesn't match a list of strings, required for setting labels.")
+        #     else:
+        #         raise TypeError("Y[1] doesn't match a np.ndarray, required for setting errors.")
+        # else:
+        #     raise TypeError("Y doesn't match either a np.ndarray, or a tuple with Y[0] as a np.ndarray.")
+        raise TypeError("Set either with a np.ndarray or a tuple with (y, yerr) or (y, yerr, ylabels).")
     
     @property
     def dependent_vars(self) -> tuple[np.ndarray, np.ndarray]:
@@ -184,19 +225,21 @@ class transport_base(metaclass=ABCMeta):
         return self.y()
     
     @dependent_vars.setter
-    def dependent_vars(self, vars, labels=None, errs=None) -> None:
+    def dependent_vars(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Alias for y. Sets values for the dependent variable(s).
 
         Parameters
         ----------
-        vars : np.ndarray
-            A 2D data array. If labels not provided, must match existing labels length.
-        labels : list, optional
-            A list of string labels, must match vars length, by default None.
-        errs : np.ndarray, optional
-            A 2D data array, corresponding to errors of vars, by default None.
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for y, or a tuple with (y, yerr) or (y, yerr, ylabels).
+            If labels is not provided, new y must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
-        return self.y(vars=vars, labels=labels, errs=errs)
+        return self.y(vars=vars)
 
     @abstractmethod
     @property
@@ -216,21 +259,39 @@ class transport_base(metaclass=ABCMeta):
     
     @abstractmethod
     @z.setter
-    def z(self, vars, labels=None, errs=None) -> None:
-        
+    def z(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Sets values for the extra dependent variable(s).
-
+        
         Parameters
         ----------
-        vars : numpy.ndarray
-            A 2D data array. If labels not provided, must match existing labels length.
-        labels : list, optional
-            A list of string labels, must match vars length, by default None.
-        errs : np.ndarray, optional
-            A 2D data array, corresponding to errors of vars, by default None.
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for z, or a tuple with (z, zerr) or (z, zerr, zlabels).
+            If labels is not provided, new z must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
-        return 
-
+        
+        if isinstance(vars, np.ndarray):
+            self._z = vars.copy()
+            self._zerrs = None
+            return
+        elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
+            self._z = vars[0].copy()
+            l = len(vars)
+            if l == 1:
+                return
+            elif isinstance(vars[1], np.ndarray):
+                self._zerrs = vars[1].copy()
+                if l == 2:
+                    return
+                elif l == 3 and isinstance(vars[2], list):
+                    self._zerrs = vars[1]
+                    self._zlabels = vars[2]
+                    return
+        raise TypeError("Set either with a np.ndarray or a tuple with (z, zerr) or (z, zerr, zlabels).")
 
     @property
     def extra_vars(self) -> tuple[np.ndarray, np.ndarray]:
@@ -241,22 +302,24 @@ class transport_base(metaclass=ABCMeta):
         tuple[np.ndarray, np.ndarray]
             A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        return self.z()
+        return self.z
     
     @extra_vars.setter
-    def extra_vars(self, vars, labels=None, errs=None) -> None:
+    def extra_vars(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Alias for z. Sets values for the extra dependent variable(s).
 
         Parameters
         ----------
-        vars : np.ndarray
-            A 2D data array. If labels not provided, must match existing labels length.
-        labels : list, optional
-            A list of string labels, must match vars length, by default None.
-        errs : np.ndarray, optional
-            A 2D data array, corresponding to uncertainty of vars, by default None.
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+            2D array with values for y, or a tuple with (y, yerr) or (y, yerr, ylabels).
+            If labels is not provided, new y must match existing labels length.
+        
+        Raises
+        ------
+        TypeError
+            Raises type error if assignment doesn't match required format.
         """
-        return self.z(vars=vars, labels=labels, errs=errs)
+        return self.z(vars)
 
     @property
     def data(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
@@ -269,33 +332,35 @@ class transport_base(metaclass=ABCMeta):
             Each element is a tuple corresponding to independent and dependent variables.
             
         """
-        x, xerr = self.x()
-        y, yerr = self.y()
+        x, xerr = self.x
+        y, yerr = self.y
         return ((x,y), (xerr,yerr))
     
     @data.setter
-    def data(self, x, y, xerr=None, yerr=None, xlabels=None, ylabels=None) -> None:
+    def data(self, vars: tuple[np.ndarray, np.ndarray] |
+             tuple[tuple[np.ndarray, np.ndarray],tuple[np.ndarray, np.ndarray]] |
+             tuple[tuple[np.ndarray, np.ndarray, list],tuple[np.ndarray, np.ndarray, list]]) -> None:
         """Sets independent and dependent variables, but not extra-dependent variables.
 
         Parameters
         ----------
-        x : np.ndarray
-            Independent variables.
-        y : np.ndarray
-            Dependent variables.
-        xerr : np.ndarray, optional
-            Independent errors, corresponding to x, by default None
-        yerr : _type_, optional
-            _description_, by default None
-        xlabels : _type_, optional
-            _description_, by default None
-        ylabels : _type_, optional
-            _description_, by default None
+        vars : tuple[np.ndarray, np.ndarray] | tuple[tuple[np.ndarray, np.ndarray],tuple[np.ndarray, np.ndarray]] | tuple[tuple[np.ndarray, np.ndarray, list],tuple[np.ndarray, np.ndarray, list]]
+            Tuple of values (X, Y). 
+            X and Y can be np.ndarrays, or tuples with (x, xerr) or (x, xerr, xlabel)
+            If labels is not provided, new x/y columns must match existing labels length.
         """
-        self.x(x, errs=xerr, labels=xlabels)
-        self.y = 
+        if isinstance(vars, tuple) and len(vars) == 2:
+            X,Y = vars
+            # Use setters for X and Y.
+            self.x(X)
+            self.y(Y)
+            
+        else:
+            raise TypeError("Data setting requires a tuple (X,Y) of length 2. X/Y can be a np.ndarray, or a tuple with (x, xerr) or (x, xerr, xlabels).")
         
         return
+    
+
     
     @property
     def data_all(self):
