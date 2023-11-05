@@ -40,15 +40,24 @@ class transport_base(metaclass=ABCMeta):
             # raise AttributeError("No data passed to constructor.")
         super().__init__()
         
-        #Sweep Dir
-        self.sweep_dir = None
+        # Sweep Direction
+        self.sweep_dir = transport_base.sweep_enum.UNDEFINED
+        
+        # Data Mask
         self.mask = None
+        
+        # Data
+        ## Independent Variables
         self._x = None
         self._xerrs = None
         self._xlabels = None
+        
+        ## Dependent Variables
         self._y = None
         self._yerrs = None
         self._ylabels = None
+        
+        ## Extra Variables
         self._z = None
         self._zerrs = None
         self._zlabels = None
