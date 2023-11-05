@@ -6,9 +6,11 @@ from pylectric.graphing import graphwrappers, journals
 import pylectric
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from matplotlib import axes as mplaxes
 import numpy as np
 from enum import Enum
 import pandas as pd
+from typing import Sequence
 
 class transport_base(metaclass=ABCMeta):
     """ An abstract class to expand and bind graphing functions to geometric objects.
@@ -390,34 +392,81 @@ class transport_base(metaclass=ABCMeta):
             raise TypeError("Data setting requires a tuple (X,Y,Z) of length 3. X/Y/Z can be a np.ndarray, or a tuple with (x, xerr) or (x, xerr, xlabels).")
         return
 
-    def all_vars(self):
+    def all_vars(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+        """ Alias for data_all. Equivalent to independent variables, dependent variables and extra variables.
+
+        Returns
+        -------
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple with elements corresponding to values and uncertainty ((x,y), (xerr,yerr)).
+            Each element is a tuple corresponding to independent and dependent variables.
+            
+        """
         return self.data_all()
+    
+    @staticmethod
+    def _1D_graph(data: tuple[np.ndarray, np.ndarray] | np.ndarray | list, ax: mplaxes.Axes = None,
+                 scatter: bool = False, **mpl_kwargs)-> pylectric.graphing.transport_graph:
+        
+        
+        c1 = isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)
+        c2 = isinstance(data, np.ndarray)
+        
+        if c1 or c2:
+            
+        else:
+            raise AttributeError("Data passed as an innapropriate format")
+            
+        
+        if ax is None:
+            # Create figure/axis
+            fig, ax = plt.subplots(1, 1)
+        else:
+            fig = ax.get_figure()
+        # Graphing wrapper
+        tg = graphwrappers.transport_graph(ax)
+        tg.defaults()
+        fig.set_size_inches(
+            w=journals.acsNanoLetters.maxwidth_2col, h=3)
+
+        # Plot data:
+        if scatter:
+            ax.scatter(data[:, 0], data[:, 1], **mpl_kwargs)
+        else:
+            ax.plot(data[:, 0], data[:, 1], **mpl_kwargs)
+        
+        # TODO: Uncomment...
+        # tg.setDefaultTicks()
+        
+        return tg
+
+        
 
     @staticmethod
     def _plot_1Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_1Ddata(data, ax, scatter=False, **mpl_kwargs)
+        return transport_base._graph_1Ddata(data, ax, scatter=False, **mpl_kwargs)
 
     @staticmethod
     def _scatter_1Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_1Ddata(data, ax, scatter=True, **mpl_kwargs)
+        return transport_base._graph_1Ddata(data, ax, scatter=True, **mpl_kwargs)
     
     @staticmethod
     def _plot_2Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
+        return transport_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
 
     @staticmethod
     def _scatter_2Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
+        return transport_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
 
     @staticmethod
     def _plot_3Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
+        return transport_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
     @staticmethod
     def _scatter_3Ddata(data, ax=None, **mpl_kwargs):
-        return graphable_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
+        return transport_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
 
     @staticmethod
-    def _graph_1Ddata(data, ax=None, scatter=False, **mpl_kwargs):
+    def _graph_1Ddata(data: tuple[np.ndarray, np.ndarray] | np.ndarray, ax: mpl.axes.Axes = None, scatter: bool = False, **mpl_kwargs):
         """Plots XY data in a 2D Numpy Array
 
         Args:
@@ -559,18 +608,18 @@ class transport_base(metaclass=ABCMeta):
         vari = self.ind_vars()
         vard = self.dep_vars()
         vare = self.extra_vars()
-        graphable_base._data_compatability(vari, vard)
+        transport_base._data_compatability(vari, vard)
         if vare is not None:
-            graphable_base._data_compatability(vari, vare)
+            transport_base._data_compatability(vari, vare)
             data = np.c_[vari, vard, vare]
         else:
             data = np.c_[vari, vard]
             
         li = len(vari.shape)
         if li == 1:
-            tg = graphable_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
+            tg = transport_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
         elif li == 2 or li == 3:
-            tg = graphable_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = transport_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")        
         return tg
@@ -594,10 +643,10 @@ class transport_base(metaclass=ABCMeta):
         li = len(vari.shape)
         if li == 1:
             data = np.c_[vari, vard]
-            tg = graphable_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = transport_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         elif li == 2 or li == 3:
             data = np.c_[vari, vard]
-            tg = graphable_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = transport_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")
 
@@ -612,15 +661,15 @@ class transport_base(metaclass=ABCMeta):
     def __sub__(self, x):
         """ Abstract method for computing a difference in self.dep_vars() and self.extra_vars().
         This method itself will account for differences in datalengths, or mismatches in self.ind_vars() values between objects.
-        Difference data is returned in the graphable_base.all_vars() format, but needs to be assigned, therefore an abstract method.
+        Difference data is returned in the transport_base.all_vars() format, but needs to be assigned, therefore an abstract method.
         
         Args:
-            x (graphable_base): Another object whose data will be used to subtract against.
+            x (transport_base): Another object whose data will be used to subtract against.
             
         Returns: 
-            sub (Numpy NDarray): One numpy array of data (corresponding to the same format as graphable_base.all_vars()) corresponding to subtraction.
+            sub (Numpy NDarray): One numpy array of data (corresponding to the same format as transport_base.all_vars()) corresponding to subtraction.
         """
-        assert isinstance(x, graphable_base)
+        assert isinstance(x, transport_base)
         # check that datalength of two arrays match.
         diff = self.ind_vars().shape[0] - x.ind_vars().shape[0]
         match = np.all(self.ind_vars() == x.ind_vars())
@@ -679,9 +728,9 @@ class transport_base_dataseries(transport_base):
         assert key in self.dataseries
         indvars = self.ind_vars()
         value = self.dataseries[key]
-        graphable_base._data_compatability(indvars, value)
+        transport_base._data_compatability(indvars, value)
         data = np.c_[indvars, value]
-        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         tg.ax[0].set_ylabel(key)
         return tg
     
@@ -703,10 +752,10 @@ class transport_base_dataseries(transport_base):
             
         vari = self.ind_vars()
         vard = self.dep_vars()
-        graphable_base._data_compatability(vari, vard)
-        graphable_base._data_compatability(vari, vare)
+        transport_base._data_compatability(vari, vard)
+        transport_base._data_compatability(vari, vare)
         data = np.c_[vari, vard, vare]
-        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         i = vard.shape[-1]
         tg.ax[i].set_ylabel(key)
         return tg
@@ -731,9 +780,9 @@ class transport_base_dataseries(transport_base):
         # TODO: Update for 3D version...
         indvars = self.ind_vars()
         ds_data = np.c_[*[self.dataseries[key] for key in self.dataseries]]
-        graphable_base._data_compatability(indvars, ds_data)
+        transport_base._data_compatability(indvars, ds_data)
         data = np.c_[indvars, ds_data]
-        tg = graphable_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         for i in range(len(self.dataseries)):
             tg.ax[i].set_ylabel(list(self.dataseries)[i])
         return tg
