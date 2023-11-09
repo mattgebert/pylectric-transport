@@ -1,6 +1,7 @@
 # Coding
 from overrides import override
 from abc import abstractmethod, ABCMeta
+from typing import Type, Sequence, Self
 #Methods
 from pylectric.graphing import graphwrappers, journals
 import pylectric
@@ -10,7 +11,6 @@ from matplotlib import axes as mplaxes
 import numpy as np
 from enum import Enum
 import pandas as pd
-from typing import Sequence
 
 class transport_base(metaclass=ABCMeta):
     """ An abstract class to expand and bind graphing functions to geometric objects.
@@ -41,9 +41,9 @@ class transport_base(metaclass=ABCMeta):
         super().__init__()
         
         # Sweep Direction
-        self.sweep_dir = transport_base.sweep_enum.UNDEFINED
+        self._sweep_dir = None #initalizes None as might not match dimensions of data. 
         
-        # Data Mask
+        # Data Mask - Used to perform all operations on a subset of the data.
         self.mask = None
         
         # Data
@@ -88,7 +88,55 @@ class transport_base(metaclass=ABCMeta):
         clone._zlabels = self._zlabels.copy() if self._zlabels is not None else None
         return clone
 
-    @abstractmethod
+    @property
+    def sweep_dir(self) -> Self.sweep_enum | list[Self.sweep_enum]:
+        return self._sweep_dir
+        
+    @sweep_dir.setter
+    def sweep_dir(self, dir: Self.sweep_enum | bool | None | list[Self.sweep_enum] | list[bool | None]) -> None:
+        if hasattr(dir, "__len__"): # Multiple sweep directions provided.
+            x = self.x[0]
+            if len(x.shape) == 2 and x.shape[1]==len(dir): # Check that provided sweep directions match number of columns of x .
+                dirs = []
+                for sweep in dir:
+                    if sweep is transport_base.sweep_enum:
+                        pass    
+                    elif isinstance(sweep, bool):
+                        sweep = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+                    elif sweep is None:
+                        sweep = transport_base.sweep_enum.UNDEFINED
+                    else:
+                        raise AttributeError("Dir element is not sweep_enum, bool or None.")
+                    dirs.append(sweep)
+                self._sweep_dir = dirs
+            elif len(x.shape) == 1 and len(dir) == 1: # Only one element in list and only one variable.
+                dir = dir[0]
+                if dir is transport_base.sweep_enum:
+                    pass
+                elif isinstance(dir, bool):
+                    dir = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+                elif dir is None:
+                    dir = transport_base.sweep_enum.UNDEFINED
+                else:
+                    raise AttributeError("Dir element is not sweep_enum, bool or None.")
+                self._sweep_dir = dir
+                return
+            else:
+                raise AttributeError("Number of sweep directions must match number of x columns.")
+        elif len(self.x[0].shape) == 1: # Check that x only has one variable.
+            if dir is transport_base.sweep_enum:
+                pass
+            elif isinstance(dir, bool):
+                dir = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+            elif dir is None:
+                dir = transport_base.sweep_enum.UNDEFINED
+            else:
+                raise AttributeError("Dir is not sweep_enum, bool or None.")
+            self._sweep_dir = dir
+            return
+        else:
+            raise AttributeError("Number of sweep directions must match number of x columns.")
+
     @property
     def x(self) -> tuple[np.ndarray, np.ndarray]:
         """Returns the independent variable(s).  
@@ -102,25 +150,26 @@ class transport_base(metaclass=ABCMeta):
         
     @abstractmethod
     @x.setter
-    def x(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
+    def x(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list[str]]) -> None:
         """Sets values for the independent variable(s). 
-        X-errors are set to None if not provided at the same time.
+        Assignment automatically defines sweep direction, assuming data is a timeseries.
+        X-errors are set to None if not provided in a tuple.
 
         Parameters
         ----------
-        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]
+        vars : np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list[str]]
             2D array with values for x, or a tuple with (x, xerr) or (x, xerr, xlabels).
             If labels is not provided, new x must match existing labels length.
         
         Raises
         ------
         TypeError
-            Raises type error if assignment doesn't match required format.
+            Raises if assignment doesn't match required format.
         """
         if isinstance(vars, np.ndarray):
             self._x = vars.copy()
             self._xerrs = None
-            return
+            self.sweep_dir = self._determine_sweep_direction()
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._x = vars[0].copy()
             l = len(vars)
@@ -154,7 +203,8 @@ class transport_base(metaclass=ABCMeta):
     @independent_vars.setter
     def independent_vars(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Alias for x. Sets values for the independent variable(s). 
-        X-errors are set to None if not provided at the same time.
+        Assignment automatically defines sweep direction, assuming data is a timeseries.
+        X-errors are set to None if not provided in a tuple.
 
         Parameters
         ----------
@@ -391,6 +441,18 @@ class transport_base(metaclass=ABCMeta):
     def data_all(self, vars:tuple[np.ndarray, np.ndarray, np.ndarray] |
              tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] |
              tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]) -> None:
+        """ Sets all data by calling setters for x,y and z.
+
+        Parameters
+        ----------
+        vars : tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] | tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]
+            
+
+        Raises
+        ------
+        TypeError
+            _description_
+        """
         if isinstance(vars, tuple) and len(vars) == 3:
             X,Y,Z = vars
             # Use setters for X,Y,Z
@@ -401,6 +463,7 @@ class transport_base(metaclass=ABCMeta):
             raise TypeError("Data setting requires a tuple (X,Y,Z) of length 3. X/Y/Z can be a np.ndarray, or a tuple with (x, xerr) or (x, xerr, xlabels).")
         return
 
+    @property
     def all_vars(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
         """ Alias for data_all. Equivalent to independent variables, dependent variables and extra variables.
 
@@ -413,43 +476,103 @@ class transport_base(metaclass=ABCMeta):
         """
         return self.data_all()
     
+    @all_vars.setter
+    def all_vars(self, vars: tuple[np.ndarray, np.ndarray, np.ndarray] |
+             tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] |
+             tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]) -> None:
+        return self.data_all(vars)
+    
     @staticmethod
-    def _1D_graph(data: tuple[np.ndarray, np.ndarray] | np.ndarray | list, ax: mplaxes.Axes = None,
-                 scatter: bool = False, **mpl_kwargs)-> pylectric.graphing.transport_graph:
-        
+    def _determine_sweep_direction(timeseries: np.ndarray | list[np.ndarray]) -> Self.sweep_enum | list[Self.sweep_enum]:
+        """Calculates the sweep direction for a given timeseries by identifying the majority trend through the given data.
+        If timeseries increases > 90% of the time, POSITIVE sweep direction is assigned.
+        If timeseries decreases > 90% of the time, NEGATIVE sweep direction is assigned.
+        Otherwise, UNDEFINED sweep direction is assigned.
+
+        Parameters
+        ----------
+        timeseries : np.ndarray | list[np.ndarray]
+            A 1D or 2D array, or list of such arrays to determine sweep directions.
+
+        Returns
+        -------
+        Self.sweep_enum | list[Self.sweep_enum]
+            Enumerables for each ndarray or column.
+            
+        """
+        if isinstance(timeseries, np.ndarray):
+            if len(timeseries.shape) > 2:
+                raise AttributeError("Method only accepts 1D or 2D arrays, where each column is processed for sweep direction.")
+            else:
+                if timeseries.shape == 1: #1D 
+                    deltas = np.diff(timeseries[:,c])
+                    if np.sum(deltas>0) / len(deltas) > 0.9:
+                        return transport_base.sweep_enum.POSITIVE
+                    elif np.sum(deltas<0) / len(deltas) > 0.9:
+                        return transport_base.sweep_enum.NEGATIVE
+                    else:
+                        return transport_base.sweep_enum.UNDEFINED
+                else:    
+                    dirs = []
+                    for c in range(timeseries.shape[1]):
+                        # Process each 1D subarray.
+                        dirs.append(transport_base._determine_sweep_direction(timeseries[:,c]))
+                    return dirs
+        elif isinstance(timeseries, list):
+            dirs = []
+            for element in timeseries:
+                # Process each list element.
+                dirs.append(transport_base._determine_sweep_direction(element))
+            return dirs
+        else:
+            raise TypeError("Requires a list of np.ndarrays or a single np.ndarray.")
+    
+    @staticmethod
+    def _1D_graph(data: tuple[np.ndarray, np.ndarray] | np.ndarray, 
+                  ax: mplaxes.Axes | None = None,
+                  graph_method: function = mplaxes.Axes.plot, 
+                  **mpl_kwargs) -> pylectric.graphing.transport_graph:
         
         c1 = isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)
-        c2 = isinstance(data, np.ndarray)
+        c2 = isinstance(data, np.ndarray) and len(data.shape) == 2 and data.shape[1] == 2
+        assert callable(graph_method)
         
         if c1 or c2:
-            
-        else:
-            raise AttributeError("Data passed as an innapropriate format")
-            
-        
-        if ax is None:
             # Create figure/axis
-            fig, ax = plt.subplots(1, 1)
+            fig, ax = plt.subplots(1,1) if ax is None else (ax.get_figure(), ax)
+            
+            # Graphing wrapper
+            tg = graphwrappers.transport_graph(ax)
+            tg.defaults()
+            fig.set_size_inches(
+                w=journals.acsNanoLetters.maxwidth_2col, h=3)
+            
+            # Arrange data:
+            if c1:
+                x,y = data
+            elif c2:
+                x = data[:,0]
+                y = data[:,1]
+                
+            # Plot data:
+            graph_method(ax, x=x, y=y, **mpl_kwargs)
+            
+            # TODO: Uncomment...
+            # tg.setDefaultTicks()
+            
+            return tg
         else:
-            fig = ax.get_figure()
-        # Graphing wrapper
-        tg = graphwrappers.transport_graph(ax)
-        tg.defaults()
-        fig.set_size_inches(
-            w=journals.acsNanoLetters.maxwidth_2col, h=3)
+            raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y) or data")
 
-        # Plot data:
-        if scatter:
-            ax.scatter(data[:, 0], data[:, 1], **mpl_kwargs)
-        else:
-            ax.plot(data[:, 0], data[:, 1], **mpl_kwargs)
-        
-        # TODO: Uncomment...
-        # tg.setDefaultTicks()
-        
-        return tg
+    @staticmethod
+    def graph_scatter()
+    
+    @staticmethod
+    def graph_errorbar()
+    
+    @staticmethod
+    def graph_plot()
 
-        
 
     @staticmethod
     def _plot_1Ddata(data, ax=None, **mpl_kwargs):
