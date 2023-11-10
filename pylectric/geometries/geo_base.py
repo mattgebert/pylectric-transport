@@ -3,8 +3,8 @@ from overrides import override
 from abc import abstractmethod, ABCMeta
 from typing import Type, Sequence, Self
 #Methods
-from pylectric.graphing import graphwrappers, journals
 import pylectric
+from pylectric import graphing
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib import axes as mplaxes
@@ -44,7 +44,9 @@ class transport_base(metaclass=ABCMeta):
         self._sweep_dir = None #initalizes None as might not match dimensions of data. 
         
         # Data Mask - Used to perform all operations on a subset of the data.
-        self.mask = None
+        self._mask_x = None
+        self._mask_y = None
+        self._mask_z = None
         
         # Data
         ## Independent Variables
@@ -87,6 +89,123 @@ class transport_base(metaclass=ABCMeta):
         clone._zerrs = self._zerrs.copy() if self._zerrs is not None else None
         clone._zlabels = self._zlabels.copy() if self._zlabels is not None else None
         return clone
+
+    @property
+    def mask_x(self) -> np.ndarray:
+        """Returns the mask for x. 
+        False (True) implies datapoint is included (excluded).
+        An excluded datapoint is treated as a np.NaN to keep consistent shapes.
+
+        Returns
+        -------
+        np.ndarray[bool]
+            Returns a numpy array of mask values.
+        """
+        return self._mask_x
+    
+    @mask_x.setter
+    def mask_x(self, mask: np.ndarray) -> None:
+        """Sets the mask for x.
+
+        Parameters
+        ----------
+        mask : np.ndarray[bool]
+            Numpy array matching dimensions of existing x, with dtype bool.
+
+        Raises
+        ------
+        AttributeError
+            Raises if the mask shape does not match the x shape.
+            Raises if the mask is not boolean dtype.
+        """
+        if self._x is not None and self._x.shape == mask.shape:
+            if mask.dtype == bool:
+                self._mask_x = mask
+                return
+            else:
+                raise AttributeError("Provided mask is not boolean.")
+        elif self._x is None:
+            raise AttributeError("x values are not set.")
+        else:
+            raise AttributeError("Mask shape doesn't match existing x.")
+
+    @property
+    def mask_y(self) -> np.ndarray:
+        """Returns the mask for y. 
+        False (True) implies datapoint is included (excluded).
+        An excluded datapoint is treated as a np.NaN to keep consistent shapes.
+
+        Returns
+        -------
+        np.ndarray[bool]
+            Returns a numpy array of mask values.
+        """
+        return self._mask_y
+    
+    @mask_y.setter
+    def mask_y(self, mask: np.ndarray) -> None:
+        """Sets the mask for y.
+
+        Parameters
+        ----------
+        mask : np.ndarray[bool]
+            Numpy array matching dimensions of existing y, with dtype bool.
+
+        Raises
+        ------
+        AttributeError
+            Raises if the mask shape does not match the y shape.
+            Raises if the mask is not boolean dtype.
+        """
+        if self._y is not None and self._y.shape == mask.shape:
+            if mask.dtype == bool:
+                self._mask_y = mask
+                return
+            else:
+                raise AttributeError("Provided mask is not boolean.")
+        elif self._y is None:
+            raise AttributeError("y values are not set.")
+        else:
+            raise AttributeError("Mask dimensions doesn't match existing y.")
+        
+    @property
+    def mask_z(self) -> np.ndarray:
+        """Returns the mask for z. 
+        False (True) implies datapoint is included (excluded).
+        An excluded datapoint is treated as a np.NaN to keep consistent shapes.
+
+        Returns
+        -------
+        np.ndarray[bool]
+            Returns a numpy array of mask values.
+        """
+        return self._mask_z
+    
+    @mask_z.setter
+    def mask_z(self, mask: np.ndarray) -> None:
+        """Sets the mask for z.
+
+        Parameters
+        ----------
+        mask : np.ndarray[bool]
+            Numpy array matching dimensions of existing z, with dtype bool.
+
+        Raises
+        ------
+        AttributeError
+            Raises if the mask shape does not match the z shape.
+            Raises if the mask is not boolean dtype.
+        """
+        if self._z is not None and self._z.shape == mask.shape:
+            if mask.dtype == bool:
+                self._mask_z = mask
+                return
+            else:
+                raise AttributeError("Provided mask is not boolean.")
+        elif self._z is None:
+            raise AttributeError("z values are not set.")
+        else:
+            raise AttributeError("Mask dimensions doesn't match existing z.")
 
     @property
     def sweep_dir(self) -> Self.sweep_enum | list[Self.sweep_enum]:
@@ -137,6 +256,51 @@ class transport_base(metaclass=ABCMeta):
         else:
             raise AttributeError("Number of sweep directions must match number of x columns.")
 
+    @staticmethod
+    def _determine_sweep_direction(timeseries: np.ndarray | list[np.ndarray]) -> Self.sweep_enum | list[Self.sweep_enum]:
+        """Calculates the sweep direction for a given timeseries by identifying the majority trend through the given data.
+        If timeseries increases > 90% of the time, POSITIVE sweep direction is assigned.
+        If timeseries decreases > 90% of the time, NEGATIVE sweep direction is assigned.
+        Otherwise, UNDEFINED sweep direction is assigned.
+
+        Parameters
+        ----------
+        timeseries : np.ndarray | list[np.ndarray]
+            A 1D or 2D array, or list of such arrays to determine sweep directions.
+
+        Returns
+        -------
+        Self.sweep_enum | list[Self.sweep_enum]
+            Enumerables for each ndarray or column.
+            
+        """
+        if isinstance(timeseries, np.ndarray):
+            if len(timeseries.shape) > 2:
+                raise AttributeError("Method only accepts 1D or 2D arrays, where each column is processed for sweep direction.")
+            else:
+                if timeseries.shape == 1: #1D 
+                    deltas = np.diff(timeseries[:,c])
+                    if np.sum(deltas>0) / len(deltas) > 0.9:
+                        return transport_base.sweep_enum.POSITIVE
+                    elif np.sum(deltas<0) / len(deltas) > 0.9:
+                        return transport_base.sweep_enum.NEGATIVE
+                    else:
+                        return transport_base.sweep_enum.UNDEFINED
+                else:    
+                    dirs = []
+                    for c in range(timeseries.shape[1]):
+                        # Process each 1D subarray.
+                        dirs.append(transport_base._determine_sweep_direction(timeseries[:,c]))
+                    return dirs
+        elif isinstance(timeseries, list):
+            dirs = []
+            for element in timeseries:
+                # Process each list element.
+                dirs.append(transport_base._determine_sweep_direction(element))
+            return dirs
+        else:
+            raise TypeError("Requires a list of np.ndarrays or a single np.ndarray.")
+
     @property
     def x(self) -> tuple[np.ndarray, np.ndarray]:
         """Returns the independent variable(s).  
@@ -146,7 +310,7 @@ class transport_base(metaclass=ABCMeta):
         tuple[np.ndarray, np.ndarray]
             A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
         """
-        return (self._x, self._xerrs)
+        return (self._x[~self.mask_x], self._xerrs[~self.mask_x])
         
     @abstractmethod
     @x.setter
@@ -169,9 +333,10 @@ class transport_base(metaclass=ABCMeta):
         if isinstance(vars, np.ndarray):
             self._x = vars.copy()
             self._xerrs = None
-            self.sweep_dir = self._determine_sweep_direction()
+            self.sweep_dir = transport_base._determine_sweep_direction(vars)
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._x = vars[0].copy()
+            self.sweep_dir = transport_base._determine_sweep_direction(vars[0])
             l = len(vars)
             if l == 1:
                 return
@@ -190,6 +355,43 @@ class transport_base(metaclass=ABCMeta):
         # else:
         #     raise TypeError("X doesn't match either a np.ndarray, or a tuple with X[0] as a np.ndarray.")
         raise TypeError("Set either with a np.ndarray or a tuple with (x, xerr) or (x, xerr, xlabels).")
+    
+    @property
+    def xlabels(self) -> list[str]:
+        """List of xlabels, index matched to columns of x.
+        
+        Returns
+        -------
+        list[str]
+            List of xlabel strings, index matched to columns of x.
+        """
+        return self._xlabels
+    
+    @xlabels.setter
+    def xlabels(self, labels: list[str]) -> None:
+        """Setter for xlabels, index matched to columns of x.
+
+        Parameters
+        ----------
+        labels : list[str] | str
+            List of xlabel strings or singular string, index matched to columns of x.
+
+        Raises
+        ------
+        AttributeError
+            Raised if the length of the provided list doesn't match the number of x columns. 
+        """
+        if isinstance(labels, str) and len(self._x.shape) == 1:
+            # String provided
+            self._xlabels = [labels]
+        elif isinstance(labels, list) and len(self._x.shape) == 1 and len(labels) == 1:
+            # Single label in list
+            self._xlabels = labels.copy()
+        elif isinstance(labels, list) and len(self._x.shape) == 2 and len(labels) == self._x.shape[1]:    
+            # Multiple labels:
+            self._xlabels = labels.copy()
+        else:
+            raise AttributeError("Length of provided labels doesn't match number of x columns.")
     
     @property
     def independent_vars(self) -> tuple[np.ndarray, np.ndarray]:
@@ -266,13 +468,44 @@ class transport_base(metaclass=ABCMeta):
                     self._yerrs = vars[1]
                     self._ylabels = vars[2]
                     return
-        #         else:
-        #             raise TypeError("Y[2] doesn't match a list of strings, required for setting labels.")
-        #     else:
-        #         raise TypeError("Y[1] doesn't match a np.ndarray, required for setting errors.")
-        # else:
-        #     raise TypeError("Y doesn't match either a np.ndarray, or a tuple with Y[0] as a np.ndarray.")
         raise TypeError("Set either with a np.ndarray or a tuple with (y, yerr) or (y, yerr, ylabels).")
+    
+    @property
+    def ylabels(self) -> list[str]:
+        """List of ylabels, index matched to columns of y.
+        
+        Returns
+        -------
+        list[str]
+            List of ylabel strings, index matched to columns of y.
+        """
+        return self._ylabels
+    
+    @ylabels.setter
+    def ylabels(self, labels: list[str]) -> None:
+        """Setter for ylabels, index matched to columns of y.
+
+        Parameters
+        ----------
+        labels : list[str] | str
+            List of ylabel strings or singular string, index matched to columns of y.
+
+        Raises
+        ------
+        AttributeError
+            Raised if the length of the provided list doesn't match the number of y columns. 
+        """
+        if isinstance(labels, str) and len(self._y.shape) == 1:
+            # String provided
+            self._ylabels = [labels]
+        elif isinstance(labels, list) and len(self._y.shape) == 1 and len(labels) == 1:
+            # Single label in list
+            self._ylabels = labels.copy()
+        elif isinstance(labels, list) and len(self._y.shape) == 2 and len(labels) == self._y.shape[1]:    
+            # Multiple labels:
+            self._ylabels = labels.copy()
+        else:
+            raise AttributeError("Length of provided labels doesn't match number of y columns.")
     
     @property
     def dependent_vars(self) -> tuple[np.ndarray, np.ndarray]:
@@ -355,6 +588,43 @@ class transport_base(metaclass=ABCMeta):
         raise TypeError("Set either with a np.ndarray or a tuple with (z, zerr) or (z, zerr, zlabels).")
 
     @property
+    def zlabels(self) -> list[str]:
+        """List of zlabels, index matched to columns of z.
+        
+        Returns
+        -------
+        list[str]
+            List of zlabel strings, index matched to columns of z.
+        """
+        return self._zlabels
+    
+    @zlabels.setter
+    def zlabels(self, labels: list[str] | str) -> None:
+        """Setter for zlabels, index matched to columns of z.
+
+        Parameters
+        ----------
+        labels : list[str] | str
+            List of zlabel strings or singular string, index matched to columns of z.
+
+        Raises
+        ------
+        AttributeError
+            Raised if the length of the provided list doesn't match the number of z columns. 
+        """
+        if isinstance(labels, str) and len(self._z.shape) == 1:
+            # String provided
+            self._zlabels = [labels]
+        elif isinstance(labels, list) and len(self._z.shape) == 1 and len(labels) == 1:
+            # Single label in list
+            self._zlabels = labels.copy()
+        elif isinstance(labels, list) and len(self._z.shape) == 2 and len(labels) == self._z.shape[1]:    
+            # Multiple labels:
+            self._zlabels = labels.copy()
+        else:
+            raise AttributeError("Length of provided labels doesn't match number of z columns.")
+
+    @property
     def extra_vars(self) -> tuple[np.ndarray, np.ndarray]:
         """Alias for z. Returns the extra dependent variable(s), of lesser importance.
 
@@ -428,8 +698,7 @@ class transport_base(metaclass=ABCMeta):
         Returns
         -------
         tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
-            A tuple with elements corresponding to values and uncertainty ((x,y), (xerr,yerr)).
-            Each element is a tuple corresponding to independent and dependent variables.
+            A tuple with elements corresponding to values and uncertainty ((x,y,z), (xerr,yerr,zerr)).
             
         """
         x, xerr = self.x
@@ -446,7 +715,7 @@ class transport_base(metaclass=ABCMeta):
         Parameters
         ----------
         vars : tuple[np.ndarray, np.ndarray, np.ndarray] | tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]] | tuple[tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list], tuple[np.ndarray, np.ndarray, list]]
-            
+            A tuple of length 3 corresponding to (x,y,z). Each index can be comprosied of x, (x, xerr) or (x, xerr, xlabels).
 
         Raises
         ------
@@ -483,55 +752,10 @@ class transport_base(metaclass=ABCMeta):
         return self.data_all(vars)
     
     @staticmethod
-    def _determine_sweep_direction(timeseries: np.ndarray | list[np.ndarray]) -> Self.sweep_enum | list[Self.sweep_enum]:
-        """Calculates the sweep direction for a given timeseries by identifying the majority trend through the given data.
-        If timeseries increases > 90% of the time, POSITIVE sweep direction is assigned.
-        If timeseries decreases > 90% of the time, NEGATIVE sweep direction is assigned.
-        Otherwise, UNDEFINED sweep direction is assigned.
-
-        Parameters
-        ----------
-        timeseries : np.ndarray | list[np.ndarray]
-            A 1D or 2D array, or list of such arrays to determine sweep directions.
-
-        Returns
-        -------
-        Self.sweep_enum | list[Self.sweep_enum]
-            Enumerables for each ndarray or column.
-            
-        """
-        if isinstance(timeseries, np.ndarray):
-            if len(timeseries.shape) > 2:
-                raise AttributeError("Method only accepts 1D or 2D arrays, where each column is processed for sweep direction.")
-            else:
-                if timeseries.shape == 1: #1D 
-                    deltas = np.diff(timeseries[:,c])
-                    if np.sum(deltas>0) / len(deltas) > 0.9:
-                        return transport_base.sweep_enum.POSITIVE
-                    elif np.sum(deltas<0) / len(deltas) > 0.9:
-                        return transport_base.sweep_enum.NEGATIVE
-                    else:
-                        return transport_base.sweep_enum.UNDEFINED
-                else:    
-                    dirs = []
-                    for c in range(timeseries.shape[1]):
-                        # Process each 1D subarray.
-                        dirs.append(transport_base._determine_sweep_direction(timeseries[:,c]))
-                    return dirs
-        elif isinstance(timeseries, list):
-            dirs = []
-            for element in timeseries:
-                # Process each list element.
-                dirs.append(transport_base._determine_sweep_direction(element))
-            return dirs
-        else:
-            raise TypeError("Requires a list of np.ndarrays or a single np.ndarray.")
-    
-    @staticmethod
     def _1D_graph(data: tuple[np.ndarray, np.ndarray] | np.ndarray, 
                   ax: mplaxes.Axes | None = None,
                   graph_method: function = mplaxes.Axes.plot, 
-                  **mpl_kwargs) -> pylectric.graphing.transport_graph:
+                  **mpl_kwargs) -> graphing.transport_graph:
         
         c1 = isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)
         c2 = isinstance(data, np.ndarray) and len(data.shape) == 2 and data.shape[1] == 2
@@ -542,10 +766,10 @@ class transport_base(metaclass=ABCMeta):
             fig, ax = plt.subplots(1,1) if ax is None else (ax.get_figure(), ax)
             
             # Graphing wrapper
-            tg = graphwrappers.transport_graph(ax)
+            tg = graphing.transport_graph(ax)
             tg.defaults()
             fig.set_size_inches(
-                w=journals.acsNanoLetters.maxwidth_2col, h=3)
+                w=graphing.journals.acsNanoLetters.maxwidth_2col, h=3)
             
             # Arrange data:
             if c1:
@@ -553,6 +777,7 @@ class transport_base(metaclass=ABCMeta):
             elif c2:
                 x = data[:,0]
                 y = data[:,1]
+                
                 
             # Plot data:
             graph_method(ax, x=x, y=y, **mpl_kwargs)
@@ -564,23 +789,24 @@ class transport_base(metaclass=ABCMeta):
         else:
             raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y) or data")
 
-    @staticmethod
-    def graph_scatter()
+    def graph_scatter(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+        x = self.x[0] if xi is None else self.x[0][:,xi]
+        y = self.y[0] if yi is None else self.y[0][:,yi]
+        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.scatter)
     
-    @staticmethod
-    def graph_errorbar()
+    def graph_errorbar(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+        x, xerr = self.x
+        y, yerr = self.y
+        x = x if xi is None else x[:,xi]
+        y = y if yi is None else y[:,yi]
+        xerr = xerr if xi is None else xerr[:,xi]
+        yerr = yerr if yi is None else yerr[:,yi]
+        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.errorbar)
     
-    @staticmethod
-    def graph_plot()
-
-
-    @staticmethod
-    def _plot_1Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_1Ddata(data, ax, scatter=False, **mpl_kwargs)
-
-    @staticmethod
-    def _scatter_1Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_1Ddata(data, ax, scatter=True, **mpl_kwargs)
+    def graph_plot(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+        x = self.x[0] if xi is None else self.x[0][:,xi]
+        y = self.y[0] if yi is None else self.y[0][:,yi]
+        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.plot)
     
     @staticmethod
     def _plot_2Ddata(data, ax=None, **mpl_kwargs):
@@ -598,42 +824,7 @@ class transport_base(metaclass=ABCMeta):
         return transport_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
 
     @staticmethod
-    def _graph_1Ddata(data: tuple[np.ndarray, np.ndarray] | np.ndarray, ax: mpl.axes.Axes = None, scatter: bool = False, **mpl_kwargs):
-        """Plots XY data in a 2D Numpy Array
-
-        Args:
-            data (Numpy.ndarray): _description_
-            ax (matplotlib.axes): _description_. Defaults to None.
-
-        Returns:
-            pylectric.signals.graphing.transport_graph: _description_
-        """
-        assert isinstance(data, np.ndarray)
-        
-        if ax is None:
-            # Create figure/axis
-            fig, ax = plt.subplots(1, 1)
-        else:
-            fig = ax.get_figure()
-        # Graphing wrapper
-        tg = graphwrappers.transport_graph(ax)
-        tg.defaults()
-        fig.set_size_inches(
-            w=journals.acsNanoLetters.maxwidth_2col, h=3)
-
-        # Plot data:
-        if scatter:
-            ax.scatter(data[:, 0], data[:, 1], **mpl_kwargs)
-        else:
-            ax.plot(data[:, 0], data[:, 1], **mpl_kwargs)
-        
-        # TODO: Uncomment...
-        # tg.setDefaultTicks()
-        
-        return tg
-
-    @staticmethod
-    def _graph_2Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
+    def _graph_2Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphing.transport_graph:
         """Plots 2D data, that is multiple dependent variables against a single independent variable.
 
         Args:
@@ -654,7 +845,7 @@ class transport_base(metaclass=ABCMeta):
         
         # Requirements for axes object
         if axes is not None: #TODO: make this possible for axes arrays to be included from matplotlib.subplots [or isinstance(array)]
-            assert isinstance(axes, plt.Axes) or (isinstance(axes, (list, tuple, np.ndarray)) and np.all([isinstance(ax, plt.Axes) for ax in axes]))
+            assert isinstance(axes, mplaxes.Axes) or (isinstance(axes, (list, tuple, np.ndarray)) and np.all([isinstance(ax, mplaxes.Axes) for ax in axes]))
         # Requirements for Data
         assert isinstance(data, np.ndarray) 
         assert len(data.shape) == 2
@@ -664,13 +855,13 @@ class transport_base(metaclass=ABCMeta):
         if axes is None:
             fig,axes = plt.subplots(nd, 1)
             # Graphing wrapper
-            tg = graphwrappers.transport_graph(axes)
+            tg = graphing.transport_graph(axes)
             fig.set_size_inches(
                 w=journals.acsNanoLetters.maxwidth_2col, h=3*nd) #3 inches times number of plots.
         elif len(axes) != nd:
             raise AttributeError("Length of axes does not match data dimension.")
         else:
-            tg = graphwrappers.transport_graph(axes)
+            tg = graphing.transport_graph(axes)
             
         tg.defaults()
         axes = tg.ax
@@ -690,7 +881,7 @@ class transport_base(metaclass=ABCMeta):
         return tg
     
     @staticmethod
-    def _graph_3Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphwrappers.transport_graph:
+    def _graph_3Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphing.transport_graph:
         #TODO: update to match _plot_2Ddata methods... NOT WORKING.
         assert isinstance(data, np.ndarray)
         dl = len(data.shape)
@@ -703,7 +894,7 @@ class transport_base(metaclass=ABCMeta):
                 w=journals.acsNanoLetters.maxwidth_2col, h=3*nd)
         
         # Graphing wrapper
-        tg = graphwrappers.transport_graph(axes)
+        tg = graphing.transport_graph(axes)
         
         if dl==3: 
             data = data.reshape([data.shape[0] * data.shape[1],nd])
