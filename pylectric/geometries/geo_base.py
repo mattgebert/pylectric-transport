@@ -44,11 +44,6 @@ class measurement_base(metaclass=ABCMeta):
         # Sweep Direction
         self._sweep_dir = None #initalizes None as might not match dimensions of data. 
         
-        # Data Mask - Used to perform all operations on a subset of the data.
-        self._mask_x = None
-        self._mask_y = None
-        self._mask_z = None
-        
         # Data
         ## Independent Variables
         self._x = None
@@ -78,10 +73,7 @@ class measurement_base(metaclass=ABCMeta):
         clone = object.__new__(type(self))
         # Sweep Dirs may be a list
         clone.sweep_dir = self.sweep_dir if not hasattr(self.sweep_dir, "__len__") else self.sweep_dir.copy()
-        # 3 Masks
-        clone._mask_x = self._mask_x.copy() if self._mask_x is not None else None
-        clone._mask_y = self._mask_y.copy() if self._mask_y is not None else None
-        clone._mask_z = self._mask_z.copy() if self._mask_z is not None else None
+        
         # X
         clone._x = self._x.copy() if self._x is not None else None
         clone._xerrs = self._xerrs.copy() if self._xerrs is not None else None
@@ -97,26 +89,31 @@ class measurement_base(metaclass=ABCMeta):
         return clone
 
     @property
-    def mask_x(self) -> np.ndarray:
+    def mask_x(self) -> np.ndarray | None:
         """Returns the mask for x. 
         False (True) implies datapoint is included (excluded).
-        An excluded datapoint is treated as a np.NaN to keep consistent shapes.
 
         Returns
         -------
-        np.ndarray[bool]
-            Returns a numpy array of mask values.
+        np.ndarray[bool] | None
+            Returns an array of mask values.
+            If no mask, returns None.
         """
-        return self._mask_x
+        if isinstance(self._x, np.ma.MaskedArray) and self._x.mask is not False:
+            return self._x.mask
+        else:
+            return None
     
     @mask_x.setter
-    def mask_x(self, mask: np.ndarray) -> None:
-        """Sets the mask for x.
+    def mask_x(self, mask: np.ndarray | bool) -> None:
+        """Sets the mask for x and xerrs. 
+        False (True) implies datapoint is included (excluded).
 
         Parameters
         ----------
-        mask : np.ndarray[bool]
+        mask : np.ndarray[bool] | bool
             Numpy array matching dimensions of existing x, with dtype bool.
+            If bool is provided, all values are masked.
 
         Raises
         ------
@@ -124,9 +121,24 @@ class measurement_base(metaclass=ABCMeta):
             Raises if the mask shape does not match the x shape.
             Raises if the mask is not boolean dtype.
         """
+        # Bool provided. Scale mask to x shape.
+        if self._x is not None and isinstance(mask, bool):
+            mask = np.full_like(self._x, mask, dtype=bool)
+            
+        # Array provided. Check input mask matches shape of existing x.
         if self._x is not None and self._x.shape == mask.shape:
+            # Check mask is boolean.
             if mask.dtype == bool:
-                self._mask_x = mask
+                
+                # Check if x, xerr are masked arrays, if not replace with one.
+                if isinstance(self._x, np.ma.MaskedArray):
+                    self._x.mask=mask
+                else:
+                    self._x = np.ma.MaskedArray(self._x, mask)
+                if isinstance(self._xerrs, np.ma.MaskedArray):
+                    self._xerrs.mask=mask
+                else:
+                    self._xerrs = np.ma.MaskedArray(self._xerrs, mask)
                 return
             else:
                 raise AttributeError("Provided mask is not boolean.")
@@ -134,6 +146,17 @@ class measurement_base(metaclass=ABCMeta):
             raise AttributeError("x values are not set.")
         else:
             raise AttributeError("Mask shape doesn't match existing x.")
+
+    @mask_x.deleter
+    def mask_x(self) -> None:
+        """Removes Converts masked arrays back to regular numpy arrays.
+        """
+        if isinstance(self._x, np.ma.MaskedArray):
+            self._x = np.array(self._x)
+        if isinstance(self._x, np.ma.MaskedArray):
+            self._xerrs = np.array(self._xerrs)
+        return
+
 
     @property
     def mask_y(self) -> np.ndarray:
