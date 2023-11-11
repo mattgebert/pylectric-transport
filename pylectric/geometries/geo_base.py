@@ -12,7 +12,7 @@ import numpy as np
 from enum import Enum
 import pandas as pd
 
-class transport_base(metaclass=ABCMeta):
+class measurement_base(metaclass=ABCMeta):
     """ An abstract class to expand and bind graphing functions to geometric objects.
         All data is timeseries data, represented by rows for various variable columns.
         Data also should implement a sweep direction to plot.
@@ -32,6 +32,7 @@ class transport_base(metaclass=ABCMeta):
         POSITIVE = 1 # +ve change in ind. var.
         NEGATIVE = 2 # -ve change in ind. var.
     
+    @abstractmethod
     def __init__(self) -> None:
         """Initalizes base transport class. 
         Requires implementation of sweep direction with independent variable(s).
@@ -65,17 +66,22 @@ class transport_base(metaclass=ABCMeta):
         self._zlabels = None
         return
 
-    def __copy__(self):
-        """Creates a deep clone of base datasets.
+    @abstractmethod
+    def __copy__(self) -> Type[Self]:
+        """ Creates a deep clone of base datasets.
 
         Returns
         -------
-        transport_base
-            _description_
+        Type[Self]
+            A new instance of the (sub-)class.
         """
         clone = object.__new__(type(self))
-        clone.sweep_dir = self.sweep_dir
-        clone.mask = self.mask.copy() if self.mask is not None else None
+        # Sweep Dirs may be a list
+        clone.sweep_dir = self.sweep_dir if not hasattr(self.sweep_dir, "__len__") else self.sweep_dir.copy()
+        # 3 Masks
+        clone._mask_x = self._mask_x.copy() if self._mask_x is not None else None
+        clone._mask_y = self._mask_y.copy() if self._mask_y is not None else None
+        clone._mask_z = self._mask_z.copy() if self._mask_z is not None else None
         # X
         clone._x = self._x.copy() if self._x is not None else None
         clone._xerrs = self._xerrs.copy() if self._xerrs is not None else None
@@ -214,41 +220,41 @@ class transport_base(metaclass=ABCMeta):
     @sweep_dir.setter
     def sweep_dir(self, dir: Self.sweep_enum | bool | None | list[Self.sweep_enum] | list[bool | None]) -> None:
         if hasattr(dir, "__len__"): # Multiple sweep directions provided.
-            x = self.x[0]
+            x = self.x
             if len(x.shape) == 2 and x.shape[1]==len(dir): # Check that provided sweep directions match number of columns of x .
                 dirs = []
                 for sweep in dir:
-                    if sweep is transport_base.sweep_enum:
+                    if sweep is measurement_base.sweep_enum:
                         pass    
                     elif isinstance(sweep, bool):
-                        sweep = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+                        sweep = measurement_base.sweep_enum.POSITIVE if dir else measurement_base.sweep_enum.NEGATIVE
                     elif sweep is None:
-                        sweep = transport_base.sweep_enum.UNDEFINED
+                        sweep = measurement_base.sweep_enum.UNDEFINED
                     else:
                         raise AttributeError("Dir element is not sweep_enum, bool or None.")
                     dirs.append(sweep)
                 self._sweep_dir = dirs
             elif len(x.shape) == 1 and len(dir) == 1: # Only one element in list and only one variable.
                 dir = dir[0]
-                if dir is transport_base.sweep_enum:
+                if dir is measurement_base.sweep_enum:
                     pass
                 elif isinstance(dir, bool):
-                    dir = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+                    dir = measurement_base.sweep_enum.POSITIVE if dir else measurement_base.sweep_enum.NEGATIVE
                 elif dir is None:
-                    dir = transport_base.sweep_enum.UNDEFINED
+                    dir = measurement_base.sweep_enum.UNDEFINED
                 else:
                     raise AttributeError("Dir element is not sweep_enum, bool or None.")
                 self._sweep_dir = dir
                 return
             else:
                 raise AttributeError("Number of sweep directions must match number of x columns.")
-        elif len(self.x[0].shape) == 1: # Check that x only has one variable.
-            if dir is transport_base.sweep_enum:
+        elif len(self.x.shape) == 1: # Check that x only has one variable.
+            if dir is measurement_base.sweep_enum:
                 pass
             elif isinstance(dir, bool):
-                dir = transport_base.sweep_enum.POSITIVE if dir else transport_base.sweep_enum.NEGATIVE
+                dir = measurement_base.sweep_enum.POSITIVE if dir else measurement_base.sweep_enum.NEGATIVE
             elif dir is None:
-                dir = transport_base.sweep_enum.UNDEFINED
+                dir = measurement_base.sweep_enum.UNDEFINED
             else:
                 raise AttributeError("Dir is not sweep_enum, bool or None.")
             self._sweep_dir = dir
@@ -281,38 +287,43 @@ class transport_base(metaclass=ABCMeta):
                 if timeseries.shape == 1: #1D 
                     deltas = np.diff(timeseries[:,c])
                     if np.sum(deltas>0) / len(deltas) > 0.9:
-                        return transport_base.sweep_enum.POSITIVE
+                        return measurement_base.sweep_enum.POSITIVE
                     elif np.sum(deltas<0) / len(deltas) > 0.9:
-                        return transport_base.sweep_enum.NEGATIVE
+                        return measurement_base.sweep_enum.NEGATIVE
                     else:
-                        return transport_base.sweep_enum.UNDEFINED
+                        return measurement_base.sweep_enum.UNDEFINED
                 else:    
                     dirs = []
                     for c in range(timeseries.shape[1]):
                         # Process each 1D subarray.
-                        dirs.append(transport_base._determine_sweep_direction(timeseries[:,c]))
+                        dirs.append(measurement_base._determine_sweep_direction(timeseries[:,c]))
                     return dirs
         elif isinstance(timeseries, list):
             dirs = []
             for element in timeseries:
                 # Process each list element.
-                dirs.append(transport_base._determine_sweep_direction(element))
+                dirs.append(measurement_base._determine_sweep_direction(element))
             return dirs
         else:
             raise TypeError("Requires a list of np.ndarrays or a single np.ndarray.")
 
     @property
-    def x(self) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the independent variable(s).  
+    def x(self) -> np.ndarray:
+        """Returns the independent variable(s). 
+        If mask_x is defined and has True values, corresponding x values are returned as np.nan.
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray]
-            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        np.ndarray
+            A 2D data array, with columns corresponding to the independent variables of x.
         """
-        return (self._x[~self.mask_x], self._xerrs[~self.mask_x])
+        if self._mask_x is None:
+            return self._x
+        else:
+            xnans = self._x.copy()
+            xnans[self._mask_x] = np.nan
+            return xnans
         
-    @abstractmethod
     @x.setter
     def x(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list[str]]) -> None:
         """Sets values for the independent variable(s). 
@@ -333,10 +344,11 @@ class transport_base(metaclass=ABCMeta):
         if isinstance(vars, np.ndarray):
             self._x = vars.copy()
             self._xerrs = None
-            self.sweep_dir = transport_base._determine_sweep_direction(vars)
+            self.sweep_dir = measurement_base._determine_sweep_direction(vars)
+            return
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._x = vars[0].copy()
-            self.sweep_dir = transport_base._determine_sweep_direction(vars[0])
+            self.sweep_dir = measurement_base._determine_sweep_direction(vars[0])
             l = len(vars)
             if l == 1:
                 return
@@ -348,12 +360,6 @@ class transport_base(metaclass=ABCMeta):
                     self._xerrs = vars[1]
                     self._xlabels = vars[2]
                     return
-        #         else:
-        #             raise TypeError("X[2] doesn't match a list of strings, required for setting labels.")
-        #     else:
-        #         raise TypeError("X[1] doesn't match a np.ndarray, required for setting errors.")
-        # else:
-        #     raise TypeError("X doesn't match either a np.ndarray, or a tuple with X[0] as a np.ndarray.")
         raise TypeError("Set either with a np.ndarray or a tuple with (x, xerr) or (x, xerr, xlabels).")
     
     @property
@@ -422,19 +428,23 @@ class transport_base(metaclass=ABCMeta):
         self.x(vars=vars)
         return
     
-    @abstractmethod
     @property
-    def y(self) -> tuple[np.ndarray, np.ndarray]:
-        """Returns the dependent variable(s).  
+    def y(self) -> np.ndarray:
+        """Returns the dependent variable(s). 
+        If mask_y is defined and has True values, corresponding y values are returned as np.nan.
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray]
-            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        np.ndarray
+            A 2D data array, with columns corresponding to the independent variables of y.
         """
-        return (self._y, self._yerrs)
+        if self._mask_y is None:
+            return self._y
+        else:
+            ynans = self._y.copy()
+            ynans[self._mask_y] = np.nan
+            return ynans
     
-    @abstractmethod
     @y.setter
     def y(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         
@@ -535,23 +545,23 @@ class transport_base(metaclass=ABCMeta):
         """
         return self.y(vars=vars)
 
-    @abstractmethod
     @property
-    def z(self):
-        """Returns the extra dependent variable(s), of lesser importance.
+    def z(self) -> np.ndarray:
+        """Returns the extra dependent variable(s), of lesser importance. 
+        If mask_z is defined and has True values, corresponding z values are returned as np.nan.
 
         Returns
         -------
-        tuple[np.ndarray, np.ndarray]
-            A tuple of two 2D data arrays corresponding to (values, errors). Errors may be None or NaN.
+        np.ndarray
+            A 2D data array, with columns corresponding to the independent variables of x.
         """
-        
-        z = None
-        zerr = None
-        
-        return (z, zerr)
+        if self._mask_z is None:
+            return self._z
+        else:
+            znans = self._z.copy()
+            znans[self._mask_z] = np.nan
+            return znans
     
-    @abstractmethod
     @z.setter
     def z(self, vars: np.ndarray | tuple[np.ndarray,np.ndarray] | tuple[np.ndarray, np.ndarray, list]) -> None:
         """Sets values for the extra dependent variable(s).
@@ -790,9 +800,9 @@ class transport_base(metaclass=ABCMeta):
             raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y) or data")
 
     def graph_scatter(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
-        x = self.x[0] if xi is None else self.x[0][:,xi]
-        y = self.y[0] if yi is None else self.y[0][:,yi]
-        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.scatter)
+        x = self.x if xi is None else self.x[:,xi]
+        y = self.y if yi is None else self.y[:,yi]
+        return measurement_base._1D_graph((x, y), ax=ax, graph_method=plt.scatter)
     
     def graph_errorbar(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
         x, xerr = self.x
@@ -801,27 +811,27 @@ class transport_base(metaclass=ABCMeta):
         y = y if yi is None else y[:,yi]
         xerr = xerr if xi is None else xerr[:,xi]
         yerr = yerr if yi is None else yerr[:,yi]
-        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.errorbar)
+        return measurement_base._1D_graph((x, y), ax=ax, graph_method=plt.errorbar)
     
     def graph_plot(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
-        x = self.x[0] if xi is None else self.x[0][:,xi]
-        y = self.y[0] if yi is None else self.y[0][:,yi]
-        return transport_base._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        x = self.x if xi is None else self.x[:,xi]
+        y = self.y if yi is None else self.y[:,yi]
+        return measurement_base._1D_graph((x, y), ax=ax, graph_method=plt.plot)
     
     @staticmethod
     def _plot_2Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
+        return measurement_base._graph_2Ddata(data, ax, scatter=False, **mpl_kwargs)
 
     @staticmethod
     def _scatter_2Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
+        return measurement_base._graph_2Ddata(data, ax, scatter=True, **mpl_kwargs)
 
     @staticmethod
     def _plot_3Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
+        return measurement_base._graph_3Ddata(data, ax, scatter=False, **mpl_kwargs)
     @staticmethod
     def _scatter_3Ddata(data, ax=None, **mpl_kwargs):
-        return transport_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
+        return measurement_base._graph_3Ddata(data, ax, scatter=True, **mpl_kwargs)
 
     @staticmethod
     def _graph_2Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphing.transport_graph:
@@ -931,18 +941,18 @@ class transport_base(metaclass=ABCMeta):
         vari = self.ind_vars()
         vard = self.dep_vars()
         vare = self.extra_vars()
-        transport_base._data_compatability(vari, vard)
+        measurement_base._data_compatability(vari, vard)
         if vare is not None:
-            transport_base._data_compatability(vari, vare)
+            measurement_base._data_compatability(vari, vare)
             data = np.c_[vari, vard, vare]
         else:
             data = np.c_[vari, vard]
             
         li = len(vari.shape)
         if li == 1:
-            tg = transport_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
+            tg = measurement_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
         elif li == 2 or li == 3:
-            tg = transport_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = measurement_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")        
         return tg
@@ -966,10 +976,10 @@ class transport_base(metaclass=ABCMeta):
         li = len(vari.shape)
         if li == 1:
             data = np.c_[vari, vard]
-            tg = transport_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = measurement_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
         elif li == 2 or li == 3:
             data = np.c_[vari, vard]
-            tg = transport_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
+            tg = measurement_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
         else:
             raise AttributeError("Too many independent variables")
 
@@ -984,15 +994,15 @@ class transport_base(metaclass=ABCMeta):
     def __sub__(self, x):
         """ Abstract method for computing a difference in self.dep_vars() and self.extra_vars().
         This method itself will account for differences in datalengths, or mismatches in self.ind_vars() values between objects.
-        Difference data is returned in the transport_base.all_vars() format, but needs to be assigned, therefore an abstract method.
+        Difference data is returned in the measurement_base.all_vars() format, but needs to be assigned, therefore an abstract method.
         
         Args:
-            x (transport_base): Another object whose data will be used to subtract against.
+            x (measurement_base): Another object whose data will be used to subtract against.
             
         Returns: 
-            sub (Numpy NDarray): One numpy array of data (corresponding to the same format as transport_base.all_vars()) corresponding to subtraction.
+            sub (Numpy NDarray): One numpy array of data (corresponding to the same format as measurement_base.all_vars()) corresponding to subtraction.
         """
-        assert isinstance(x, transport_base)
+        assert isinstance(x, measurement_base)
         # check that datalength of two arrays match.
         diff = self.ind_vars().shape[0] - x.ind_vars().shape[0]
         match = np.all(self.ind_vars() == x.ind_vars())
@@ -1030,7 +1040,7 @@ class transport_base(metaclass=ABCMeta):
     def to_DataFrame(self):
         return pd.DataFrame(self.all_vars())
 
-class transport_base_dataseries(transport_base):
+class measurement_base_dataseries(measurement_base):
     def __init__(self, dataseries) -> None:
         self.dataseries = {}
         for key, value in dataseries.items():
@@ -1051,9 +1061,9 @@ class transport_base_dataseries(transport_base):
         assert key in self.dataseries
         indvars = self.ind_vars()
         value = self.dataseries[key]
-        transport_base._data_compatability(indvars, value)
+        measurement_base._data_compatability(indvars, value)
         data = np.c_[indvars, value]
-        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         tg.ax[0].set_ylabel(key)
         return tg
     
@@ -1075,10 +1085,10 @@ class transport_base_dataseries(transport_base):
             
         vari = self.ind_vars()
         vard = self.dep_vars()
-        transport_base._data_compatability(vari, vard)
-        transport_base._data_compatability(vari, vare)
+        measurement_base._data_compatability(vari, vard)
+        measurement_base._data_compatability(vari, vare)
         data = np.c_[vari, vard, vare]
-        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         i = vard.shape[-1]
         tg.ax[i].set_ylabel(key)
         return tg
@@ -1103,9 +1113,9 @@ class transport_base_dataseries(transport_base):
         # TODO: Update for 3D version...
         indvars = self.ind_vars()
         ds_data = np.c_[*[self.dataseries[key] for key in self.dataseries]]
-        transport_base._data_compatability(indvars, ds_data)
+        measurement_base._data_compatability(indvars, ds_data)
         data = np.c_[indvars, ds_data]
-        tg = transport_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
+        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
         for i in range(len(self.dataseries)):
             tg.ax[i].set_ylabel(list(self.dataseries)[i])
         return tg
