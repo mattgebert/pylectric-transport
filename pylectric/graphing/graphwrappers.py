@@ -1,5 +1,6 @@
 import matplotlib as mpl
-from matplotlib import pyplot as plt
+import matplotlib.axes as mplaxes
+import matplotlib.pyplot as plt
 from matplotlib import ticker
 import numpy as np
 from . import geo_base, journals
@@ -45,8 +46,7 @@ class scalable_graph(mpl.Figure):
         "Z": 21,
         "Y": 24
     }
-
-    def __init__(self, axfig) -> None:
+    def __init__(self, axfig: list[mplaxes.Axes]) -> None:
         """_summary_
         Args:
             axfig (List of Axes | Single Figure): Multiple Matplotlib Axes objects or a single Matplotlib Figure.
