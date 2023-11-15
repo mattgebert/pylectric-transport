@@ -443,7 +443,7 @@ class measurement_base(metaclass=ABCMeta):
     def array(self) -> npt.NDArray:
         return 
  
-    def full_array(self) -> npt.NDArray:
+    def array_all(self) -> npt.NDArray:
         """Returns all variables in a single 2D numpy array.
 
         Returns
@@ -567,7 +567,18 @@ class measurement_base(metaclass=ABCMeta):
         else:
             raise AttributeError("Errs doesn't match shape of z.")
 
-    def full_array_errs(self) -> npt.NDArray:
+    
+    def array_errs(self) -> npt.NDArray:
+        """Returns errors of variables in a single 2D numpy array.
+
+        Returns
+        -------
+        npt.NDArray
+            An array of errors of variables of x,y.
+        """
+        return np.c_[self.xerrs, self.yerrs]
+
+    def array_errs_all(self) -> npt.NDArray:
         """Returns all errors of variables in a single 2D numpy array.
 
         Returns
@@ -699,9 +710,18 @@ class measurement_base(metaclass=ABCMeta):
         list[str]
             List of strings describing each column for x,y variables.
         """
-        return self.xlabels + self.ylabels
-
-    def all_labels(self) -> list[str]:
+        xl = self.xlabels
+        yl = self.ylabels
+        if xl is None and yl is None:
+            return None
+        elif isinstance(xl, list) and isinstance(yl, list):
+            return xl + yl
+        elif xl is None:
+            return yl
+        elif yl is None:
+            return xl
+        
+    def labels_all(self) -> list[str]:
         """Returns all x,y,z labels in a single, consecutive list.
 
         Returns
@@ -1069,15 +1089,31 @@ class measurement_base(metaclass=ABCMeta):
             #single x variable
             return pylectric.signals.feature_detection.find_arrow_location(xdata=self.ind_vars(),ydata=self.dep_vars()[:,i])
 
-    def to_DataFrame(self):
-        labels = self.labels
-        return pd.DataFrame(self.full_array(), columns=labels if labels is not None else None)
+    def to_DataFrame(self) -> pd.DataFrame:
+        """Generates a Pandas DataFrame object, containing x,y data and using x,y labels if defined.
 
-    def to_DataFrame_all(self):
-        labels = self.labels
-        return pd.DataFrame(self.full_array(), columns=labels if labels is not None else None)
+        Returns
+        -------
+        pd.DataFrame
+            Variables x and y presented in a dataframe.
+        """
+        labels = self.labels()
+        return pd.DataFrame(self.array(), columns=labels if labels is not None else None)
+
+    def to_DataFrame_all(self) -> pd.DataFrame:
+        """Generates a Pandas DataFrame object, containing x,y,z data and using x,y,z labels if defined.
+
+        Returns
+        -------
+        pd.DataFrame
+            Variables x, y and z presented in a dataframe.
+        """
+        labels = self.labels_all()
+        return pd.DataFrame(self.array_all(), columns=labels if labels is not None else None)
     
-    def to_DataFrame_x(self):
+    def to_DataFrame_x(self) -> pd.DataFrame:
+        labels = self.xlabels
+        return pd.DataFrame(self.x, labels if labels is not None else None)
         
     
 class graphable_measurement(measurement_base, metaclass=ABCMeta):
