@@ -48,12 +48,12 @@ class measurement_base(metaclass=ABCMeta):
         # Data
         ## Independent Variables
         self._x = None
-        self._xerrs = None
+        self._xerr = None
         self._xlabels = None
         
         ## Dependent Variables
         self._y = None
-        self._yerrs = None
+        self._yerr = None
         self._ylabels = None
         
         ## Extra Variables
@@ -77,11 +77,11 @@ class measurement_base(metaclass=ABCMeta):
         
         # X
         clone._x = self._x.copy() if self._x is not None else None
-        clone._xerrs = self._xerrs.copy() if self._xerrs is not None else None
+        clone._xerr = self._xerr.copy() if self._xerr is not None else None
         clone._xlabels = self._xlabels.copy() if self._xlabels is not None else None
         # Y
         clone._y = self._y.copy() if self._y is not None else None
-        clone._yerrs = self._yerrs.copy() if self._yerrs is not None else None
+        clone._yerr = self._yerr.copy() if self._yerr is not None else None
         clone._ylabels = self._ylabels.copy() if self._ylabels is not None else None
         # Z
         clone._z = self._z.copy() if self._y is not None else None
@@ -215,12 +215,12 @@ class measurement_base(metaclass=ABCMeta):
         """
         newx = False # Perform additional operations if vars is valid format.
         xold = self.x
-        xolderrs = self.xerrs
+        xolderrs = self.xerr
         xoldlabels = self.xlabels
         # Check vars input and process accordingly:
         if isinstance(vars, np.ndarray):
             self._x = vars.copy()
-            self.xerrs = None
+            self.xerr = None
             newx=True
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._x = vars[0].copy()
@@ -228,23 +228,23 @@ class measurement_base(metaclass=ABCMeta):
             if l == 1:
                 newx=True
             elif isinstance(vars[1], np.ndarray):
-                self.xerrs = vars[1]
+                self.xerr = vars[1]
                 if l == 2:
                     newx=True
                 elif l == 3 and isinstance(vars[2], list):
-                    self.xerrs = vars[1]
+                    self.xerr = vars[1]
                     self.xlabels = vars[2]
                     newx=True
-        # Setup sweep direction, and enforce x mask on xerrs (as fast as checking).
+        # Setup sweep direction, and enforce x mask on xerr (as fast as checking).
         if newx:
             self.sweep_dir = measurement_base._determine_sweep_direction(self._x)
-            if isinstance(self._x, np.ma.MaskedArray) and isinstance(self._xerrs, np.ma.MaskedArray):
-                self._xerrs.mask = self._x.mask
+            if isinstance(self._x, np.ma.MaskedArray) and isinstance(self._xerr, np.ma.MaskedArray):
+                self._xerr.mask = self._x.mask
             return
         else:
             # Reset internal vars to original values.
             self._x = xold
-            self._xerrs = xolderrs
+            self._xerr = xolderrs
             self._xlabels = xoldlabels
             raise TypeError("Set either with a np.ndarray or a tuple with (x, xerr) or (x, xerr, xlabels).")
     
@@ -253,7 +253,7 @@ class measurement_base(metaclass=ABCMeta):
         """Resets all variables x,y,z (and corresponding errors and labels) to None, as y and z are required to match the datalength of x.
         """
         self._x = None
-        del self.xerrs
+        del self.xerr
         del self.xlabels
         del self.y #also calls del self.z
         return
@@ -288,12 +288,12 @@ class measurement_base(metaclass=ABCMeta):
         """
         newy = False # Perform additional operations if vars is valid format.
         yold = self.y
-        yolderrs = self.yerrs
+        yolderrs = self.yerr
         yoldlabels = self.ylabels
         # Check vars input and process accordingly:
         if isinstance(vars, np.ndarray):
             self._y = vars.copy()
-            self.yerrs = None
+            self.yerr = None
             newy=True
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._y = vars[0].copy()
@@ -301,23 +301,23 @@ class measurement_base(metaclass=ABCMeta):
             if l == 1:
                 newy=True
             elif isinstance(vars[1], np.ndarray):
-                self.yerrs = vars[1]
+                self.yerr = vars[1]
                 if l == 2:
                     newy=True
                 elif l == 3 and isinstance(vars[2], list):
-                    self.yerrs = vars[1]
+                    self.yerr = vars[1]
                     self.ylabels = vars[2]
                     newy=True
-        # Setup sweep direction, and enforce y mask on yerrs (as fast as checking).
+        # Setup sweep direction, and enforce y mask on yerr (as fast as checking).
         if newy:
             self.sweep_dir = measurement_base._determine_sweep_direction(self._y)
-            if isinstance(self._y, np.ma.MaskedArray) and isinstance(self._yerrs, np.ma.MaskedArray):
-                self._yerrs.mask = self._y.mask
+            if isinstance(self._y, np.ma.MaskedArray) and isinstance(self._yerr, np.ma.MaskedArray):
+                self._yerr.mask = self._y.mask
             return
         else:
             # Reset internal vars to original values.
             self._y = yold
-            self.yerrs = yolderrs
+            self.yerr = yolderrs
             self.ylabels = yoldlabels
             raise TypeError("Set either with a np.ndarray or a tuple with (y, yerr) or (y, yerr, ylabels).")
     
@@ -327,7 +327,7 @@ class measurement_base(metaclass=ABCMeta):
         Additionally resets z variables, as extra variables are (typically) only shown in conjunction with y.
         """
         self._y = None
-        del self.yerrs
+        del self.yerr
         del self.ylabels
         del self.z
         return
@@ -456,8 +456,8 @@ class measurement_base(metaclass=ABCMeta):
             A tuple with elements corresponding to values and uncertainty ((x,y,z), (xerr,yerr,zerr)).
             
         """
-        x, xerr = self.x, self.xerrs
-        y, yerr = self.y, self.yerrs
+        x, xerr = self.x, self.xerr
+        y, yerr = self.y, self.yerr
         z, zerr = self.z, self.zerrs
         return ((x,y,z), (xerr,yerr,zerr))
 
@@ -515,7 +515,7 @@ class measurement_base(metaclass=ABCMeta):
         return np.c_[self.x, self.y, self.z]
 
     @property
-    def xerrs(self) -> np.ndarray | None:
+    def xerr(self) -> np.ndarray | None:
         """Errors of x variables.
 
         Returns
@@ -525,10 +525,10 @@ class measurement_base(metaclass=ABCMeta):
             Columns correspond to different variables.
             Requires the same shape as x.
         """
-        return self._xerrs
+        return self._xerr
     
-    @xerrs.setter
-    def xerrs(self, errs: npt.NDArray | None) -> None:
+    @xerr.setter
+    def xerr(self, errs: npt.NDArray | None) -> None:
         """Sets new values for errors in x.
 
         Parameters
@@ -544,23 +544,23 @@ class measurement_base(metaclass=ABCMeta):
             Raises an excpetion if the shapes of x and errs don't match.
         """
         if errs is None:
-            self._xerrs = None
+            self._xerr = None
             return
         if self._x.shape == errs.shape:
-            self._xerrs = errs.copy()
+            self._xerr = errs.copy()
             return
         else:
             raise AttributeError("Errs doesn't match shape of x.")
     
-    @xerrs.deleter
-    def xerrs(self):
-        """Resets xerrs to None.
+    @xerr.deleter
+    def xerr(self):
+        """Resets xerr to None.
         """
-        self._xerrs = None
+        self._xerr = None
         return
 
     @property
-    def yerrs(self) -> np.ndarray | None:
+    def yerr(self) -> np.ndarray | None:
         """Errors of y variables.
 
         Returns
@@ -570,10 +570,10 @@ class measurement_base(metaclass=ABCMeta):
             Columns correspond to different variables.
             Requires the same shape as y.
         """
-        return self._yerrs
+        return self._yerr
     
-    @yerrs.setter
-    def yerrs(self, errs: npt.NDArray | None) -> None:
+    @yerr.setter
+    def yerr(self, errs: npt.NDArray | None) -> None:
         """Sets new values for errors in y.
 
         Parameters
@@ -589,19 +589,19 @@ class measurement_base(metaclass=ABCMeta):
             Raises an excpetion if the shapes of y and errs don't match.
         """
         if errs is None:
-            self._yerrs = None
+            self._yerr = None
             return
         elif self._y.shape == errs.shape:
-            self._yerrs = errs.copy()
+            self._yerr = errs.copy()
             return
         else:
             raise AttributeError("Errs doesn't match shape of y.")
         
-    @yerrs.deleter
-    def yerrs(self) -> None:
-        """Resets yerrs to None.
+    @yerr.deleter
+    def yerr(self) -> None:
+        """Resets yerr to None.
         """
-        self._yerrs = None
+        self._yerr = None
         
     @property
     def zerrs(self) -> np.ndarray | None:
@@ -655,7 +655,7 @@ class measurement_base(metaclass=ABCMeta):
         npt.NDArray
             An array of errors of variables of x,y.
         """
-        return np.c_[self.xerrs, self.yerrs]
+        return np.c_[self.xerr, self.yerr]
 
     def array_errs_all(self) -> npt.NDArray:
         """Returns all errors of variables in a single 2D numpy array.
@@ -665,7 +665,7 @@ class measurement_base(metaclass=ABCMeta):
         npt.NDArray
             An array of all errors of variables of x,y,z.
         """
-        return np.c_[self.xerrs, self.yerrs, self.zerrs]
+        return np.c_[self.xerr, self.yerr, self.zerrs]
 
     @property
     def xlabels(self) -> list[str]:
@@ -915,7 +915,7 @@ class measurement_base(metaclass=ABCMeta):
     
     @mask_x.setter
     def mask_x(self, mask: npt.NDArray | bool) -> None:
-        """Sets the mask for x and xerrs. 
+        """Sets the mask for x and xerr. 
         False (True) implies datapoint is included (excluded).
 
         Parameters
@@ -942,10 +942,10 @@ class measurement_base(metaclass=ABCMeta):
                     self._x.mask=mask
                 else:
                     self._x = np.ma.MaskedArray(self._x, mask)
-                if isinstance(self._xerrs, np.ma.MaskedArray):
-                    self._xerrs.mask=mask
+                if isinstance(self._xerr, np.ma.MaskedArray):
+                    self._xerr.mask=mask
                 else:
-                    self._xerrs = np.ma.MaskedArray(self._xerrs, mask)
+                    self._xerr = np.ma.MaskedArray(self._xerr, mask)
                 return
             else:
                 raise AttributeError("Provided mask is not boolean.")
@@ -961,7 +961,7 @@ class measurement_base(metaclass=ABCMeta):
         if isinstance(self._x, np.ma.MaskedArray):
             self._x = np.array(self._x)
         if isinstance(self._x, np.ma.MaskedArray):
-            self._xerrs = np.array(self._xerrs)
+            self._xerr = np.array(self._xerr)
         return
 
 
@@ -983,7 +983,7 @@ class measurement_base(metaclass=ABCMeta):
     
     @mask_y.setter
     def mask_y(self, mask: npt.NDArray | bool) -> None:
-        """Sets the mask for y and yerrs. 
+        """Sets the mask for y and yerr. 
         False (True) implies datapoint is included (excluded).
 
         Parameters
@@ -1010,10 +1010,10 @@ class measurement_base(metaclass=ABCMeta):
                     self._y.mask=mask
                 else:
                     self._y = np.ma.MaskedArray(self._y, mask)
-                if isinstance(self._yerrs, np.ma.MaskedArray):
-                    self._yerrs.mask=mask
+                if isinstance(self._yerr, np.ma.MaskedArray):
+                    self._yerr.mask=mask
                 else:
-                    self._yerrs = np.ma.MaskedArray(self._yerrs, mask)
+                    self._yerr = np.ma.MaskedArray(self._yerr, mask)
                 return
             else:
                 raise AttributeError("Provided mask is not boolean.")
@@ -1029,7 +1029,7 @@ class measurement_base(metaclass=ABCMeta):
         if isinstance(self._y, np.ma.MaskedArray):
             self._y = np.array(self._y)
         if isinstance(self._y, np.ma.MaskedArray):
-            self._yerrs = np.array(self._yerrs)
+            self._yerr = np.array(self._yerr)
         return
 
 
@@ -1323,12 +1323,12 @@ class measurement_base(metaclass=ABCMeta):
             Variable x presented in a dataframe.
         """
         xlabels = self.xlabels
-        xerrs = self.xerrs
+        xerr = self.xerr
         if xlabels is not None:
-            labels = xlabels + [a + "_err" for a in xlabels] if xerrs is not None else xlabels
+            labels = xlabels + [a + "_err" for a in xlabels] if xerr is not None else xlabels
         else:
             labels = None
-        data = np.c_[self.x, xerrs] if xerrs is not None else self.x
+        data = np.c_[self.x, xerr] if xerr is not None else self.x
         return pd.DataFrame(data, labels)
     
     def to_DataFrame_y(self) -> pd.DataFrame:
@@ -1340,12 +1340,12 @@ class measurement_base(metaclass=ABCMeta):
             Variable y presented in a dataframe.
         """
         ylabels = self.ylabels
-        yerrs = self.yerrs
+        yerr = self.yerr
         if ylabels is not None:
-            labels = ylabels + [a + "_err" for a in ylabels] if yerrs is not None else ylabels
+            labels = ylabels + [a + "_err" for a in ylabels] if yerr is not None else ylabels
         else:
             labels = None
-        data = np.c_[self.y, yerrs] if yerrs is not None else self.y
+        data = np.c_[self.y, yerr] if yerr is not None else self.y
         return pd.DataFrame(data, labels)
     
     def to_DataFrame_z(self) -> pd.DataFrame:
@@ -1365,7 +1365,7 @@ class measurement_base(metaclass=ABCMeta):
         data = np.c_[self.y, zerrs] if zerrs is not None else self.z
         return pd.DataFrame(data, labels)
     
-class graphable_measurement(measurement_base, metaclass=ABCMeta):
+class measurement_graphable(measurement_base, metaclass=ABCMeta):
     """Expands measurement_base to add graphical binding functions.
     """
     
@@ -1385,16 +1385,20 @@ class graphable_measurement(measurement_base, metaclass=ABCMeta):
         Type[graphing.scalable_graph]
             Wrapper object containing fig/ax.
         """
-        return
+        return graphing.scalable_graph(figax)
     
     @staticmethod
     def _1D_graph(data: tuple[np.ndarray, np.ndarray],
                   ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
                   graph_method: function = mplaxes.Axes.plot, 
                   fig_size: tuple[float, float] | None = None,
+                  xlabels: tuple[float, float] | None = None,
+                  ylabels: tuple[float, float] | None = None,
                   **mpl_kwargs) -> tuple[mplfigure.Figure, mplaxes.Axes | np.ndarray[mplaxes.Axes]]:
-        assert callable(graph_method)
+        
+        
         # Check format is valid requires (x,y) with numpy arrays.
+        assert callable(graph_method)
         if not (isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)):
             raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y)")
         
@@ -1433,30 +1437,36 @@ class graphable_measurement(measurement_base, metaclass=ABCMeta):
             raise AttributeError("Number of provided axes doesn't match x*y variables.")
         return fig, ax
     
-    def _graphwrapper(ax: mplaxes.Axes | ):
-    
-    
     def graph_plot(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
-        return measurement_base._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        return self._1D_wrapper(ax)
 
     def graph_scatter(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
-        return measurement_base._1D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
+        fig, ax = self._1D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
+        return self._1D_wrapper(ax)
     
     def graph_errorbar(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+        x = self.x if xi is None else self.x[:,xi]
+        y = self.y if yi is None else self.y[:,yi]
+        xerr = self.xerr if xi is None else self.xerr[:,xi]
+        yerr = self.yerr if yi is None else self.yerr[:,yi]
+        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
+        return self._1D_wrapper(ax)
+    
+    def graph_plot_error_fill(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
         x, xerr = self.x
         y, yerr = self.y
         x = x if xi is None else x[:,xi]
         y = y if yi is None else y[:,yi]
         xerr = xerr if xi is None else xerr[:,xi]
         yerr = yerr if yi is None else yerr[:,yi]
-        return measurement_base._1D_graph((x, y), ax=ax, graph_method=plt.errorbar)
-    
-    def graph_error_fill()
-        return
+        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        ax.fill_between()
+        return self._1D_wrapper(ax)
     
     def sweep_arrow_location(self, i):
         if len(self.ind_vars().shape) == 1:
@@ -1635,109 +1645,11 @@ class graphable_measurement(measurement_base, metaclass=ABCMeta):
         #             handle.set_sizes([10])
         return tg
     
-
-class measurement_base_dataseries(measurement_base):
-    def __init__(self, dataseries) -> None:
-        self.dataseries = {}
-        for key, value in dataseries.items():
-            assert isinstance(value, np.ndarray)
-            self.dataseries[key] = value.copy()
+class series_base(metaclass=ABCMeta):
+    
+    def __init__(self, instances: list[Type[measurement_base]] | list[Type[measurement_graphable]]) -> None:
         super().__init__()
+        self._instances = instances.copy()
+        return
     
-    @override
-    def vars_extra(self):
-        return np.c_[*[self.dataseries[key] for key in self.dataseries]]
-    
-    @abstractmethod
-    def plot_dataseries(self, key, ax=None, scatter=False, **mpl_kwargs):
-        """Generates a single plot of a specific key in dataseries.
-        Needs override with super call to label x axis for indipendent variables.
-        """
-        #TODO: Update for 3D version...
-        assert key in self.dataseries
-        indvars = self.ind_vars()
-        value = self.dataseries[key]
-        measurement_base._data_compatability(indvars, value)
-        data = np.c_[indvars, value]
-        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
-        tg.ax[0].set_ylabel(key)
-        return tg
-    
-    @abstractmethod
-    def plot_dataseries_with_dep_vars(self, key, ax=None, scatter=False, **mpl_kwargs):
-        """Generates a plot of all dependent data attached to object plus specific key in dataseries.
-        Subplots determined by independent variables (columns) and dependent / extra variables (rows).
-        Needs override with super call to label x & y axis for indipendent/dependent variables.
-        """
-        #TODO: Update for 3D version.
-        if isinstance(key, (list, np.ndarray)):
-            vare=None
-            for k in key:
-                assert k in self.dataseries
-                vare = self.dataseries[k] if vare is None else np.c_[vare, self.dataseries[k]]
-        else:
-            assert key in self.dataseries
-            vare = self.dataseries[key]
-            
-        vari = self.ind_vars()
-        vard = self.dep_vars()
-        measurement_base._data_compatability(vari, vard)
-        measurement_base._data_compatability(vari, vare)
-        data = np.c_[vari, vard, vare]
-        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
-        i = vard.shape[-1]
-        tg.ax[i].set_ylabel(key)
-        return tg
-
-    @override
-    @abstractmethod
-    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
-        tg = super().plot_all_data(axes, scatter, **mpl_kwargs)
-        dep_len = self.dep_vars().shape[-1]
-        labels = list(self.dataseries)
-        for i in range(len(self.dataseries)):
-            print(i,labels[i])
-            tg.ax[dep_len + i].set_ylabel(labels[i])
-        return tg
-
-    @abstractmethod
-    def plot_all_dataseries(self, ax=None, scatter=False, **mpl_kwargs):
-        """Generates a plot of all dataseries.
-        Subplot for each dataseries (rows).
-        Needs override with super call to label x axis for indipendent variables.
-        """
-        # TODO: Update for 3D version...
-        indvars = self.ind_vars()
-        ds_data = np.c_[*[self.dataseries[key] for key in self.dataseries]]
-        measurement_base._data_compatability(indvars, ds_data)
-        data = np.c_[indvars, ds_data]
-        tg = measurement_base._graph_2Ddata(data, ax, scatter, **mpl_kwargs)
-        for i in range(len(self.dataseries)):
-            tg.ax[i].set_ylabel(list(self.dataseries)[i])
-        return tg
-
-    
-
-# class graphable_ND_base(graphable_base):
-#     def __init__(self) -> None:
-#         super().__init__()
-        
-#     # @override(graphable_base)
-#     @abstractmethod
-#     def ind_vars(self):
-#         """Returns the independent variables.
-
-#         Returns:
-#             List of Numpy array: A list of 1D data arrays, for each independent variable related to the object.
-#         """
-#         return None
-    
-#     @abstractmethod(graphable_base)
-#     def dep_vars(self):
-#         """Returns the dependent variables
-
-#         Returns:
-#             Numpy array: A (N+1) dimensional array of the dependent variables related to the object, where axis N represents the Nth indepentent variable.
-#                 The (N+1)th dimension represents each dependent variable.
-#         """
-#         return None
+    def 
