@@ -1372,7 +1372,7 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
     @staticmethod
     def _2D_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
         """Wraps a figure, or a set of axes. Allows scaling and axis functions.
-        This function should be used after calling _1D_graph, and can be overridden for different measurement 
+        This function should be used after calling _2D_graph, and can be overridden for different measurement 
         objects with well defined x/y axis, such as in electrical transport measurements.
 
         Parameters
@@ -1485,13 +1485,37 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
     def _2D_labelling(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes],
                       xi: int | list[int] | None = None, yi:int | list[int] | None = None,
                       inc_z: bool = False):
-        
+        """TODO: Double check this method works.
+        Labels x/y-axis of a list/array of axes given the indexes of x/y/z variables.
+        Used in conjunction with _2D_graph, namely to be called afterward.
+
+        Parameters
+        ----------
+        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes]
+            Matplotlib axes, either a single or multiple in an array/list.
+        xi : int | list[int] | None, optional
+            A list or single index specifying which x variables to label, by default None (all x)
+        yi : int | list[int] | None, optional
+            A list or single index specifying which y variables to label, by default None (all y/z)
+        inc_z : bool, optional
+            Whether z variables are to be included in y indexes, by default False
+
+        Raises
+        ------
+        AttributeError
+            Raised in the event of a length mismatch, if ax is singular, but xlabels and ylabels are not singular.
+        AttributeError
+            Raised in the event of a length mismatch, if ax has less indexes than the pemutations of x/y.
+        AttributeError
+            Raised if ax is not a singular or list/array of matplotlib.axes.Axes.
+        """
         # Check if zlabels are included.
         if inc_z:
             xl, yl, zl = self.labels_all()
             yl = yl + zl if zl is not None else yl
         else:
             xl, yl = self.labels()
+            
         # Check if indexes given:
         if xi is not None:
             if isinstance(xi, list):
@@ -1517,6 +1541,7 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
                 ax.set_ylabel(yl)
             else:
                 raise AttributeError("x/y/z labels are multiple valued, or xi/yi indexes are multiple valued, incompatible with a single Axes.")
+    
         # Multiple plots
         elif ((isinstance(ax, list) or isinstance(ax, np.ndarray))
               and isinstance(xl, list) and isinstance(yl, list)):
@@ -1539,31 +1564,51 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
                         for j in range(len(yl)):
                             ax[i + j * len(yl)].set_xlabel(xl[i])
                             ax[i + j * len(yl)].set_ylabel(yl[j])
-                    
             else:
                 raise AttributeError("Number of axes is less than number of x & y(/z) combinations.")
         else:
             raise AttributeError("ax is not a matplotlib.axes.Axes or list/np.ndarray of such items.")
         return
     
-    def graph_plot(self, ax: mplaxes.Axes = None, 
+    def graph_plot(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] = None, 
                    xi: int | list[int] | None = None, yi: int | list[int] | None = None,
                    inc_z: bool = False) -> Type[graphing.scalable_graph]:
+        """Generates a matplotlib.pyplot.plot graph using object x,y data.
+        Plots all x/y (and z if inc_z = True) combinations unless indexes are specified.
+
+        Parameters
+        ----------
+        ax : mplaxes.Axes, optional
+            , by default None
+        xi : int | list[int] | None, optional
+            _description_, by default None
+        yi : int | list[int] | None, optional
+            _description_, by default None
+        inc_z : bool, optional
+            _description_, by default False
+
+        Returns
+        -------
+        Type[graphing.scalable_graph]
+            _description_
+        """
         x = self.x if xi is None else self.x[:,xi]
         if inc_z:
             y = np.c_[self.y, self.z] if yi is None else np.c_[self.y, self.z][:,yi]
         else:
             y = self.y if yi is None else self.y[:,yi]
-        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
-        return self._1D_wrapper(ax)
+        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.plot)
+        self._2D_labelling(ax)
+        return self._2D_wrapper(ax)
 
     def graph_scatter(self, ax: mplaxes.Axes = None, 
                       xi: int | list[int] | None = None, yi: int | list[int] | None = None,
                       inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
-        ax = self._1D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
-        return self._1D_wrapper(ax)
+        ax = self._2D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
+        self._2D_labelling(ax)
+        return self._2D_wrapper(ax)
     
     def graph_errorbar(self, ax: mplaxes.Axes = None, 
                        xi: int | None = None, yi: int | None = None,
@@ -1572,8 +1617,9 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         y = self.y if yi is None else self.y[:,yi]
         xerr = self.xerr if xi is None else self.xerr[:,xi]
         yerr = self.yerr if yi is None else self.yerr[:,yi]
-        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
-        return self._1D_wrapper(ax)
+        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
+        self._2D_labelling(ax)
+        return self._2D_wrapper(ax)
     
     def graph_plot_error_fill(self, ax: mplaxes.Axes = None, 
                               xi: int | None = None, yi: int | None = None,
@@ -1584,9 +1630,10 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         y = y if yi is None else y[:,yi]
         xerr = xerr if xi is None else xerr[:,xi]
         yerr = yerr if yi is None else yerr[:,yi]
-        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.plot)
         ax.fill_between(x=x, y1=y+yerr, y2=y-yerr)
-        return self._1D_wrapper(ax)
+        self._2D_labelling(ax)
+        return self._2D_wrapper(ax)
     
     def sweep_arrow_location(self, i):
         if len(self.ind_vars().shape) == 1:
