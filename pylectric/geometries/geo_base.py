@@ -1,7 +1,7 @@
 # Coding
 from overrides import override
 from abc import abstractmethod, ABCMeta
-from typing import Type, Sequence, Self
+from typing import Type, Sequence, Self, Any
 #Methods
 import pylectric
 from pylectric import graphing
@@ -1370,7 +1370,7 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
     """
     
     @staticmethod
-    def _1D_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
+    def _2D_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
         """Wraps a figure, or a set of axes. Allows scaling and axis functions.
         This function should be used after calling _1D_graph, and can be overridden for different measurement 
         objects with well defined x/y axis, such as in electrical transport measurements.
@@ -1388,14 +1388,46 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         return graphing.scalable_graph(figax)
     
     @staticmethod
-    def _1D_graph(data: tuple[np.ndarray, np.ndarray],
+    def _2D_graph(data: tuple[np.ndarray, np.ndarray],
                   ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
                   graph_method: function = mplaxes.Axes.plot, 
                   fig_size: tuple[float, float] | None = None,
-                  xlabels: tuple[float, float] | None = None,
-                  ylabels: tuple[float, float] | None = None,
-                  **mpl_kwargs) -> tuple[mplfigure.Figure, mplaxes.Axes | np.ndarray[mplaxes.Axes]]:
-        
+                  labels: tuple[list[str], list[str]] | None = None,
+                  **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
+        """Generates a series of 2D graphs for each permutation of x and y variables.
+
+        Parameters
+        ----------
+        data : tuple[np.ndarray, np.ndarray]
+            A tuple (x,y) of x and y variables, passed as np.ndarray objects.
+        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None, optional
+            A pre-existing single or set of matplotlib.axes.Axes, by default None
+        graph_method : function, optional
+            The 2D matplotlib.axes.Axes method to create a graph, by default matpltolib.axes.Axes.plot
+            Other options include
+                matplotlib.axes.Axes.scatter
+                matplotlib.axes.Axes.errorbar
+                matplotlib.axes.Axes.fill
+        fig_size : tuple[float, float] | None, optional
+            Sets the total size of newly generated figure, if no ax is passed. 
+            By default the value is None, which generates multiple of 3x4 inches per x/y plot.
+        labels : tuple[float, float] | None, optional
+            Sets x any y labels respectively, if not None. By default None.
+
+        Returns
+        -------
+        tuple[mplfigure.Figure, mplaxes.Axes | np.ndarray[mplaxes.Axes]]
+            Returns a tuple of the Figure and Axes (or multiple Axes) objects.
+
+        Raises
+        ------
+        AttributeError
+            Raised if data is not passed as a tuple consisting of 2 np.ndarrays.
+        AttributeError
+            Raised if x and y data length doesn't match.
+        AttributeError
+            Raised if number of axes provided doesn't match number of variable permutations between x and y. 
+        """
         
         # Check format is valid requires (x,y) with numpy arrays.
         assert callable(graph_method)
@@ -1404,68 +1436,156 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         
         # Arrange data:
         x,y = data
+        
+        # Check datalength matches for x and y.
+        if x.shape[0] != y.shape[0]:
+            raise AttributeError("Length of x data doesn't match length of y data.")
+        
         # Get data shape, match to provided axes.
         xlen = x.shape[1] if len(x.shape) > 1 else 1
         ylen = y.shape[1] if len(y.shape) > 1 else 1
         
         # 2D ax array/list
         if (hasattr(ax, "shape") and np.prod(ax.shape) == xlen * ylen
-            ) or hasattr(ax, "__len__") and len(ax)  == xlen*ylen:
+            ) or (hasattr(ax, "__len__") and len(ax)  == xlen*ylen):
             # mutliple axes
-            if hasattr(ax, "shape"):
+            if hasattr(ax, "shape") and len(ax.shape) == 2:
                 # If figsize not provided, set figsize to a standard multiple of the shape.
                 if fig_size is None:
                     fig_size = (xlen * 4, ylen * 3)
                 # Create figure/axis
-                fig, ax = plt.subplots(xlen,ylen, fig_size=fig_size) if ax is None else (ax.get_figure(), ax)
+                ax = plt.subplots(xlen,ylen, fig_size=fig_size)[1] if ax is None else ax
                 # Generate plots
                 for i in range(xlen):
                     xi = x[:,i] if xlen > 1 else x
                     for j in range(ylen):
                         yi = y[:,j] if ylen > 1 else y
                         graph_method(ax[i, j], x=xi, y=yi, **mpl_kwargs)
-            else:
+                        if labels is not None:
+                            ax[i,j].set_xlabel(labels[0][i])
+                            ax[i,j].set_ylabel(labels[1][j])
+            elif (((hasattr(ax, "shape") and len(ax.shape) == 1) or hasattr(ax, "__len__"))
+                and ()):
                 for i in range(xlen):
                     xi = x[:,i] if xlen > 1 else x
                     for j in range(ylen):
                         yi = y[:,j] if ylen > 1 else y
                         graph_method(ax[i*xlen + j], x=xi, y=yi, **mpl_kwargs)
+                        ax[i,j].set_xlabel(labels[0][i])
+                        ax[i,j].set_ylabel(labels[1][j])
+            else:
+                raise AttributeError("Too many dimensions")
         # Singular ax
         elif isinstance(ax, mplaxes.Axes) and xlen==1 and ylen==1:
             graph_method(ax, x=x, y=y, **mpl_kwargs)
         else:
             raise AttributeError("Number of provided axes doesn't match x*y variables.")
-        return fig, ax
+        return ax
     
-    def graph_plot(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+    def _2D_labelling(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes],
+                      xi: int | list[int] | None = None, yi:int | list[int] | None = None,
+                      inc_z: bool = False):
+        
+        # Check if zlabels are included.
+        if inc_z:
+            xl, yl, zl = self.labels_all()
+            yl = yl + zl if zl is not None else yl
+        else:
+            xl, yl = self.labels()
+        # Check if indexes given:
+        if xi is not None:
+            if isinstance(xi, list):
+                xl = [xl[indx] for indx in xi] 
+                # If single element, pull out of array.
+                if len(xl) == 1:
+                    xl = xl[0]
+            else: #int
+                xl = xl[xi]
+        if yi is not None:
+            if isinstance(yi, list):
+                yl = [yl[indx] for indx in yi] 
+                # if single element, pull out of array
+                if len(yl) == 1:
+                    yl = yl[0]
+            else: #int
+                yl = yl[yi]
+        
+        # Check if single axis or multiple plots.
+        if isinstance(ax, mplaxes.Axes):
+            if isinstance(xl, str) and isinstance(yl, str):
+                ax.set_xlabel(xl)
+                ax.set_ylabel(yl)
+            else:
+                raise AttributeError("x/y/z labels are multiple valued, or xi/yi indexes are multiple valued, incompatible with a single Axes.")
+        # Multiple plots
+        elif ((isinstance(ax, list) or isinstance(ax, np.ndarray))
+              and isinstance(xl, list) and isinstance(yl, list)):
+            # Check shape/length matches length of x/y lists.
+            if ((isinstance(ax, np.ndarray) and #Array
+                (np.prod(ax.shape) >= len(xl) * len(yl))) #Ax Lengths > x,y label lengths
+                or (isinstance(ax, list) # List
+                and len(ax) >= len(xl) * len(yl)) #Ax Lengths > x,y label lengths
+            ):
+                if isinstance(np.ndarray):
+                    for i in range(len(xl)): #iterate over xy labels
+                        for j in range(len(yl)):
+                            k = i * len(yl) + j #convert label i,j to array item (if mismatch)
+                            l,m = (k % ax.shape[1], round(k/ax.shape[1])) #array item to array indexes
+                            # Set each x and y label iterating over 
+                            ax[l,m].set_xlabel(xl[i])
+                            ax[l,m].set_ylabel(yl[j])
+                else: #list
+                    for i in range(len(xl)):
+                        for j in range(len(yl)):
+                            ax[i + j * len(yl)].set_xlabel(xl[i])
+                            ax[i + j * len(yl)].set_ylabel(yl[j])
+                    
+            else:
+                raise AttributeError("Number of axes is less than number of x & y(/z) combinations.")
+        else:
+            raise AttributeError("ax is not a matplotlib.axes.Axes or list/np.ndarray of such items.")
+        return
+    
+    def graph_plot(self, ax: mplaxes.Axes = None, 
+                   xi: int | list[int] | None = None, yi: int | list[int] | None = None,
+                   inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
-        y = self.y if yi is None else self.y[:,yi]
-        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        if inc_z:
+            y = np.c_[self.y, self.z] if yi is None else np.c_[self.y, self.z][:,yi]
+        else:
+            y = self.y if yi is None else self.y[:,yi]
+        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
         return self._1D_wrapper(ax)
 
-    def graph_scatter(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+    def graph_scatter(self, ax: mplaxes.Axes = None, 
+                      xi: int | list[int] | None = None, yi: int | list[int] | None = None,
+                      inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
-        fig, ax = self._1D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
+        ax = self._1D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
         return self._1D_wrapper(ax)
     
-    def graph_errorbar(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+    def graph_errorbar(self, ax: mplaxes.Axes = None, 
+                       xi: int | None = None, yi: int | None = None,
+                       inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
         xerr = self.xerr if xi is None else self.xerr[:,xi]
         yerr = self.yerr if yi is None else self.yerr[:,yi]
-        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
+        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
         return self._1D_wrapper(ax)
     
-    def graph_plot_error_fill(self, ax: mplaxes.Axes = None, xi: int | None = None, yi: int | None = None) -> graphing.transport_graph:
+    def graph_plot_error_fill(self, ax: mplaxes.Axes = None, 
+                              xi: int | None = None, yi: int | None = None,
+                              inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x, xerr = self.x
         y, yerr = self.y
         x = x if xi is None else x[:,xi]
         y = y if yi is None else y[:,yi]
         xerr = xerr if xi is None else xerr[:,xi]
         yerr = yerr if yi is None else yerr[:,yi]
-        fig, ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
-        ax.fill_between()
+        ax = self._1D_graph((x, y), ax=ax, graph_method=plt.plot)
+        ax.fill_between(x=x, y1=y+yerr, y2=y-yerr)
         return self._1D_wrapper(ax)
     
     def sweep_arrow_location(self, i):
