@@ -1369,124 +1369,90 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
     """Expands measurement_base to add graphical binding functions.
     """
     
-    @staticmethod
-    def _2D_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
-        """Wraps a figure, or a set of axes. Allows scaling and axis functions.
-        This function should be used after calling _2D_graph, and can be overridden for different measurement 
-        objects with well defined x/y axis, such as in electrical transport measurements.
-
-        Parameters
-        ----------
-        figax : mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure
-            A single or multiple Axes, either passed as a figure or list or singular.
-
-        Returns
-        -------
-        Type[graphing.scalable_graph]
-            Wrapper object containing fig/ax.
-        """
-        return graphing.scalable_graph(figax)
+    ### Function TODO write
+    # 1. Function to graph x,y data in all its permutations. 
+    #    Static method, takes axes argument, and iterates along axis. 
+    #    Also can apply labels. Requires labels to match provided x,y lengths.
+    # 2. Function to take provided indexes, and plot a subset of the desired data.
+    #    Static function, uses indexes, also applies to labels.
+    # 3. Class function to use measurement data, labels, errors to generate such graphs.
     
-    @staticmethod
-    def _2D_graph(data: tuple[np.ndarray, np.ndarray],
+    def _2D_graph(self,
+                  xi: int | list[int] | None = None, 
+                  yi: int | list[int] | None = None,
+                  inc_z: bool = False,
+                  labels: tuple[list[str], list[str]] = None,
                   ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
-                  graph_method: function = mplaxes.Axes.plot, 
-                  fig_size: tuple[float, float] | None = None,
-                  labels: tuple[list[str], list[str]] | None = None,
-                  **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
-        """Generates a series of 2D graphs for each permutation of x and y variables.
-
-        Parameters
-        ----------
-        data : tuple[np.ndarray, np.ndarray]
-            A tuple (x,y) of x and y variables, passed as np.ndarray objects.
-        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None, optional
-            A pre-existing single or set of matplotlib.axes.Axes, by default None
-        graph_method : function, optional
-            The 2D matplotlib.axes.Axes method to create a graph, by default matpltolib.axes.Axes.plot
-            Other options include
-                matplotlib.axes.Axes.scatter
-                matplotlib.axes.Axes.errorbar
-                matplotlib.axes.Axes.fill
-        fig_size : tuple[float, float] | None, optional
-            Sets the total size of newly generated figure, if no ax is passed. 
-            By default the value is None, which generates multiple of 3x4 inches per x/y plot.
-        labels : tuple[float, float] | None, optional
-            Sets x any y labels respectively, if not None. By default None.
-
-        Returns
-        -------
-        tuple[mplfigure.Figure, mplaxes.Axes | np.ndarray[mplaxes.Axes]]
-            Returns a tuple of the Figure and Axes (or multiple Axes) objects.
-
-        Raises
-        ------
-        AttributeError
-            Raised if data is not passed as a tuple consisting of 2 np.ndarrays.
-        AttributeError
-            Raised if x and y data length doesn't match.
-        AttributeError
-            Raised if number of axes provided doesn't match number of variable permutations between x and y. 
-        """
+                  graph_method: function = mplaxes.Axes.scatter,
+                  **mpl_kwargs
+                  ) -> Type[graphing.scalable_graph]:
         
-        # Check format is valid requires (x,y) with numpy arrays.
-        assert callable(graph_method)
-        if not (isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)):
-            raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y)")
-        
-        # Arrange data:
-        x,y = data
-        
-        # Check datalength matches for x and y.
-        if x.shape[0] != y.shape[0]:
-            raise AttributeError("Length of x data doesn't match length of y data.")
-        
-        # Get data shape, match to provided axes.
-        xlen = x.shape[1] if len(x.shape) > 1 else 1
-        ylen = y.shape[1] if len(y.shape) > 1 else 1
-        
-        # 2D ax array/list
-        if (hasattr(ax, "shape") and np.prod(ax.shape) == xlen * ylen
-            ) or (hasattr(ax, "__len__") and len(ax)  == xlen*ylen):
-            # mutliple axes
-            if hasattr(ax, "shape") and len(ax.shape) == 2:
-                # If figsize not provided, set figsize to a standard multiple of the shape.
-                if fig_size is None:
-                    fig_size = (xlen * 4, ylen * 3)
-                # Create figure/axis
-                ax = plt.subplots(xlen,ylen, fig_size=fig_size)[1] if ax is None else ax
-                # Generate plots
-                for i in range(xlen):
-                    xi = x[:,i] if xlen > 1 else x
-                    for j in range(ylen):
-                        yi = y[:,j] if ylen > 1 else y
-                        graph_method(ax[i, j], x=xi, y=yi, **mpl_kwargs)
-                        if labels is not None:
-                            ax[i,j].set_xlabel(labels[0][i])
-                            ax[i,j].set_ylabel(labels[1][j])
-            elif (((hasattr(ax, "shape") and len(ax.shape) == 1) or hasattr(ax, "__len__"))
-                and ()):
-                for i in range(xlen):
-                    xi = x[:,i] if xlen > 1 else x
-                    for j in range(ylen):
-                        yi = y[:,j] if ylen > 1 else y
-                        graph_method(ax[i*xlen + j], x=xi, y=yi, **mpl_kwargs)
-                        ax[i,j].set_xlabel(labels[0][i])
-                        ax[i,j].set_ylabel(labels[1][j])
+        ## Gather data and labels:
+        if inc_z: # Check if zlabels/data are included.
+            #labels
+            if labels is not None:
+                xl, yl = labels
             else:
-                raise AttributeError("Too many dimensions")
-        # Singular ax
-        elif isinstance(ax, mplaxes.Axes) and xlen==1 and ylen==1:
-            graph_method(ax, x=x, y=y, **mpl_kwargs)
+                xl, yl, zl = self.labels_all
+                yl = yl + zl if zl is not None else yl #pack z variables into y lists/arrays.
+            #data
+            x,y,z = self.data_all[0]
+            y = np.c_[y,z] #pack z variables into y lists/arrays.
         else:
-            raise AttributeError("Number of provided axes doesn't match x*y variables.")
-        return ax
+            #labels
+            xl, yl = self.labels
+            #data
+            x,y = self.data[0]
+        
+        # If xi,yi provided, use indexing method.
+        if xi is not None:
+            x = self._2D_graph_index(x, xi)
+            xl = self._2D_graph_index(xl, xi)
+        if yi is not None: 
+            y = self._2D_graph_index(y, yi)
+            yl = self._2D_graph_index(yl, xi)
+            
+        # Generate graph
+        ax = self._2D_graph_data(data=(x,y), labels = (xl, yl), ax=ax, graph_method=graph_method, **mpl_kwargs)
+        
+        # Wrap graph with scalable axis / helper label function.
+        sg = self._2D_graph_wrapper(ax)
+        
+        return sg
+        
+    @staticmethod
+    def _2D_graph_index(var: list | np.ndarray,
+                        indexes: int | list[int]) -> list | np.ndarray:
+        # Is a list? Useful for labels...
+        if isinstance(var, list):
+            if isinstance(indexes, list):
+                var_subset = [var[indx] for indx in indexes] 
+                # If single element, pull out of array.
+                if len(var_subset) == 1:
+                    var_subset = var_subset[0]
+            else: #int
+                var_subset = var[indexes]
+        # An array - 2nd axis / columns are the index variables.
+        elif isinstance(var, np.ndarray):
+            if isinstance(indexes, list):
+                var_subset = var[:,indexes] 
+                # If single element, reduce dimension.
+                if var_subset.shape[1] == 1:
+                    var_subset = var_subset[:,0]
+            else: #int
+                var_subset = var[:,indexes]
+        return var_subset
+                
+        
     
-    def _2D_labelling(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes],
-                      xi: int | list[int] | None = None, yi:int | list[int] | None = None,
-                      inc_z: bool = False):
+    @staticmethod
+    def _2D_graph_data(data: tuple[np.ndarray, np.ndarray],
+                  labels: tuple[list[str], list[str]] | None = None,
+                  ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
+                  graph_method: function = mplaxes.Axes.scatter,
+                  **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
         """TODO: Double check this method works.
-        Labels x/y-axis of a list/array of axes given the indexes of x/y/z variables.
+        Graphs and labels a x/y-axis of a list/array of axes given the indexes of x/y/z variables.
         Used in conjunction with _2D_graph, namely to be called afterward.
 
         Parameters
@@ -1509,30 +1475,13 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         AttributeError
             Raised if ax is not a singular or list/array of matplotlib.axes.Axes.
         """
-        # Check if zlabels are included.
-        if inc_z:
-            xl, yl, zl = self.labels_all()
-            yl = yl + zl if zl is not None else yl
-        else:
-            xl, yl = self.labels()
-            
-        # Check if indexes given:
-        if xi is not None:
-            if isinstance(xi, list):
-                xl = [xl[indx] for indx in xi] 
-                # If single element, pull out of array.
-                if len(xl) == 1:
-                    xl = xl[0]
-            else: #int
-                xl = xl[xi]
-        if yi is not None:
-            if isinstance(yi, list):
-                yl = [yl[indx] for indx in yi] 
-                # if single element, pull out of array
-                if len(yl) == 1:
-                    yl = yl[0]
-            else: #int
-                yl = yl[yi]
+        # Check format is valid requires (x,y) with numpy arrays.
+        assert callable(graph_method)
+        if not (isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)):
+            raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y)")
+        
+        
+        
         
         # Check if single axis or multiple plots.
         if isinstance(ax, mplaxes.Axes):
@@ -1569,6 +1518,117 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         else:
             raise AttributeError("ax is not a matplotlib.axes.Axes or list/np.ndarray of such items.")
         return
+    
+    @staticmethod
+    def _2D_graph_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
+        """Wraps a figure, or a set of axes. Allows scaling and axis functions.
+        This function should be used after calling _2D_graph, and can be overridden for different measurement 
+        objects with well defined x/y axis, such as in electrical transport measurements.
+
+        Parameters
+        ----------
+        figax : mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure
+            A single or multiple Axes, either passed as a figure or list or singular.
+
+        Returns
+        -------
+        Type[graphing.scalable_graph]
+            Wrapper object containing fig/ax.
+        """
+        return graphing.scalable_graph(figax)
+    
+    @staticmethod
+    def _2D_graph(data: tuple[np.ndarray, np.ndarray],
+                  labels: tuple[list[str], list[str]] | None = None,
+                  ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
+                  graph_method: function = mplaxes.Axes.plot, 
+                  fig_size: tuple[float, float] | None = None,
+                  **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
+        """Generates a series of 2D graphs for each permutation of x and y variables.
+
+        Parameters
+        ----------
+        data : tuple[np.ndarray, np.ndarray]
+            A tuple (x,y) of x and y variables, passed as np.ndarray objects.
+        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None, optional
+            A pre-existing single or set of matplotlib.axes.Axes, by default None
+        graph_method : function, optional
+            The 2D matplotlib.axes.Axes method to create a graph, by default matpltolib.axes.Axes.plot
+            Other options include
+                matplotlib.axes.Axes.scatter
+                matplotlib.axes.Axes.errorbar
+                matplotlib.axes.Axes.fill
+        fig_size : tuple[float, float] | None, optional
+            Sets the total size of newly generated figure, if no ax is passed. 
+            By default the value is None, which generates multiple of 3x4 inches per x/y plot.
+
+        Returns
+        -------
+        tuple[mplfigure.Figure, mplaxes.Axes | np.ndarray[mplaxes.Axes]]
+            Returns a tuple of the Figure and Axes (or multiple Axes) objects.
+
+        Raises
+        ------
+        AttributeError
+            Raised if data is not passed as a tuple consisting of 2 np.ndarrays.
+        AttributeError
+            Raised if x and y data length doesn't match.
+        AttributeError
+            Raised if number of axes provided doesn't match number of variable permutations between x and y. 
+        """
+        
+        # Check format is valid requires (x,y) with numpy arrays.
+        assert callable(graph_method)
+        if not (isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)):
+            raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y)")
+        
+        # Arrange data:
+        x,y = data
+        
+        # Check datalength matches for x and y.
+        if x.shape[0] != y.shape[0]:
+            raise AttributeError("Length of x data doesn't match length of y data.")
+        
+        # Get data shape, match to provided axes.
+        xlen = x.shape[1] if len(x.shape) > 1 else 1
+        ylen = y.shape[1] if len(y.shape) > 1 else 1
+        
+        # If figsize not provided, set figsize to a standard multiple of the shape.
+        if fig_size is None:
+            fig_size = (xlen * 4, ylen * 3)    
+        # Create figure/axis if not provided.
+        ax = plt.subplots(xlen,ylen, fig_size=fig_size)[1] if ax is None else ax
+        
+        # 2D ax array/list
+        if (hasattr(ax, "shape") and np.prod(ax.shape) == xlen * ylen
+            ) or (hasattr(ax, "__len__") and len(ax)  == xlen*ylen):
+            # mutliple axes
+            if hasattr(ax, "shape") and len(ax.shape) == 2:
+                # Generate plots
+                for i in range(xlen):
+                    xi = x[:,i] if xlen > 1 else x
+                    for j in range(ylen):
+                        yi = y[:,j] if ylen > 1 else y
+                        graph_method(ax[i, j], x=xi, y=yi, **mpl_kwargs)
+            elif (((hasattr(ax, "shape") and len(ax.shape) == 1) or hasattr(ax, "__len__"))
+                and ()):
+                for i in range(xlen):
+                    xi = x[:,i] if xlen > 1 else x
+                    for j in range(ylen):
+                        yi = y[:,j] if ylen > 1 else y
+                        graph_method(ax[i*xlen + j], x=xi, y=yi, **mpl_kwargs)
+            else:
+                raise AttributeError("Too many dimensions")
+            
+        # Singular ax
+        elif isinstance(ax, mplaxes.Axes) and xlen==1 and ylen==1:
+            graph_method(ax, x=x, y=y, **mpl_kwargs)
+        else:
+            raise AttributeError("Number of provided axes doesn't match x*y variables.")
+        return ax
+    
+    
+    
     
     def graph_plot(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] = None, 
                    xi: int | list[int] | None = None, yi: int | list[int] | None = None,
