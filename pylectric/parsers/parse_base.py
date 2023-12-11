@@ -52,27 +52,52 @@ class parserFile(metaclass=abc.ABCMeta):
         else:
             return self.fname.split("\\")[-1]
 
-    def to_Hallbar(self, rxx_label="X-Value (V)", rxy_label="X-Value 2 (V)", field_label="Magnetic Field (T)", geom=1) -> hallbar.hallbar_measurement:
+    def to_Hallbar(self, rxx_label: str = "X-Value (V)", 
+                   rxy_label: str = "X-Value 2 (V)", 
+                   field_label: str = "Magnetic Field (T)", 
+                   rxx_label_imag: str | None = None,
+                   rxy_label_imag: str | None = None,
+                   geom: float = 1) -> hallbar.hallbar_measurement:
+        
+        # Add imaginary labels to lists if they exist.
+        label_list = [field_label, rxx_label, rxy_label]
+        if rxx_label_imag is not None:
+            if isinstance(rxx_label_imag, str):
+                label_list.append(rxx_label_imag)
+            else:
+                raise AttributeError("Rxx_label_imag is not a string or None.")
+        if rxy_label_imag is not None:
+            if isinstance(rxy_label_imag, str):
+                label_list.append(rxy_label_imag)
+            else:
+                raise AttributeError("Rxy_label_imag is not a string or None.")
+        
         # Check if labels exist within data labels for correct identification of data.
-        for x in [rxx_label, rxy_label, field_label]:
+        for x in label_list:
             if x not in self.labels:
                 raise AttributeError(
                     str(x) + " does not exists within data labels.")
 
         # Construct new object.
         # Find indexes of field, rxx, rxy in data.
-
         arranged_data, arranged_labels = importing.arrange_by_label(
-            A=self.data, labels=self.labels, labels_ref=[field_label, rxx_label, rxy_label])
+            A=self.data, labels=self.labels, labels_ref=label_list)
 
         field = arranged_data[:, 0]
         rxx = arranged_data[:, 1]
         rxy = arranged_data[:, 2]
-        otherdata = arranged_data[:, 3:]
+        defc = 3
+        if rxx_label_imag is not None:
+            rxx = rxx + 1j * arranged_data[:, defc]
+            defc+=1
+        if rxy_label_imag is not None:
+            rxy = rxy + 1j * arranged_data[:, defc]
+            defc+=1
+        otherdata = arranged_data[:, defc:]
 
         dataseries = {}
-        for i in range(len(arranged_labels)-3):
-            dataseries[arranged_labels[i+3]] = otherdata[:, i]
+        for i in range(len(arranged_labels)-defc):
+            dataseries[arranged_labels[i+defc]] = otherdata[:, i]
             
         hb = hallbar.hallbar_measurement(
             field=field, rxx=rxx, rxy=rxy, dataseries=dataseries, params=self.params, geom=geom)

@@ -35,6 +35,16 @@ def split_bidirectional_sweeps(A):
     return ValueError("Not implemented")
 
 def remove_duplicate_columns(A, labels):
+    """Removes duplicate columns (data), and notes appropriately.
+
+    Args:
+        A (numpy.ndarray): Array of 2D data
+        labels (list): Column labels
+
+    Returns:
+        (np.ndarray, list): Cleaned 2D Data, Cleaned Labels
+    """
+    
     B = A.copy()
     NCols = B.shape[1]
     # dup_ind = []
@@ -62,7 +72,71 @@ def remove_duplicate_columns(A, labels):
                     dl = dup_labels[1+j:]
                     print("...\t\t-" + str(j) + ":\t'" + dl + "'")
             del new_labels[i]
+    # Search for identical labels but non-identical data reminaing in the dataset.    
+    seen = set()
+    dupl = []
+    for x in new_labels:
+        if x not in seen:
+            seen.add(x)
+        else:
+            dupl.append(x)
+    print("Warning: Duplicate labels exist with nonmatching data:")
+    for l in dupl:
+        print("...\t\t" + l)
     return (B, new_labels)
+
+def get_label_duplicate_indexes(labels):
+    """Returns indexes where labels match
+
+    Parameters
+    ----------
+    labels : Array or List
+        Array / List of string labels
+
+    Returns
+    -------
+    Dict
+        Dictionary of labels, where values are the duplicate indexes they exist at.
+    """
+    
+    duplicates = {}
+    found = set()
+    
+    for i in range(len(labels)):
+        base = labels[i]
+        dup = False
+        if base not in found:
+            for j in range(i, len(labels)):
+                if base == labels[j]:
+                    if not dup:
+                        dup = True
+                        found.add(base)
+                        duplicates[base] = [i, j]
+                    else:
+                        duplicates[base].append(j)
+    return duplicates
+
+def remove_duplicate_label_columns(A, labels):
+    
+    """Removes duplicate columns (labels), and notes appropriately.
+
+    Parameters
+    ----------
+    A : numpy.ndarray
+        Array of 2D data
+    labels : list
+        Column labels
+
+    Returns
+    -------
+    Tuple(numpy.ndarray, list)
+        Cleaned 2D Data, Cleaned Labels
+    """
+    B = A.copy()
+    newlabels = labels.copy()
+    duplicates = get_label_duplicate_indexes()
+    
+    return (B, newlabels)
 
 def arrange_by_label(A, labels, labels_ref):
     """Re-arranges a numpy array based on indexing a list of labels to a reference list of the same labels.
@@ -74,6 +148,9 @@ def arrange_by_label(A, labels, labels_ref):
         labels_ref (String): Reference labels.
     """
     B = A.copy()
+    
+    assert len(labels) == A.shape[1]
+    assert len(labels_ref) <= len(labels)
     
     # Check uniqueness
     if len(labels) != len(set(labels)):

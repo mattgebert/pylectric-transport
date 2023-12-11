@@ -18,18 +18,23 @@ def reduction(data, step, colN=0):
     Nupper = math.ceil(nmax / step)
     Nlower = math.floor(nmin / step)
     N = Nupper - Nlower
+    
     # Setup new colN
-    x = np.linspace(Nlower * step, Nupper * step, N+1)
-    if type(step) != int and step % 1 != 0:
+    x = np.arange(Nlower * step, Nupper * step, step)
+    if not isinstance(step, int) and step % 1 != 0:
         #Caculate step precision.
-        decimals = - int(np.floor(np.log10(step)))
+        decimals = - int(np.floor(np.log10(step))) # gets decimals of largest index
+        for i in range(5):
+            step_substract = np.round(step, decimals=decimals)
+            if step - step_substract == 0:
+                break
+            else:
+                decimals = decimals + 1
+                
         #apply rounding to linspace.
         x = np.round(x,decimals=decimals) #correct any float imprecision. ie - linspace(-8.0, 8.01, 1602) does not give 0.01 steps appropriately. 
 
     ### Generate averaged data from other indexes
-    # Acquire 
-    # data2 = data.copy()
-    # data2 = np.delete(data2, colN, axis=1)
     # Setup new arrays
     new_data = np.zeros((N+1, len(data[0])))
     new_data_std = np.zeros((N+1, len(data[0])))
@@ -391,7 +396,7 @@ def symmetrise(data, colN=[0], full_domain=False) -> tuple[np.ndarray, np.ndarra
         [sym, asym] (tuple[np.ndarray, np.ndarray]): Returns Symmetric and Asymmetric components of the domain.
     """
     assert isinstance(data, np.ndarray)
-    assert isinstance(colN, int) or (isinstance(colN, (list, np.ndarray)) and np.all([isinstance(a) for a in colN]))
+    assert isinstance(colN, int) or (isinstance(colN, (list, np.ndarray)) and np.all([isinstance(a, int) for a in colN]))
     
     dlen = len(data)
     is_odd = dlen & 1 #bitcheck if odd or even
