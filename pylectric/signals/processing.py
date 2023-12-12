@@ -4,6 +4,11 @@ from scipy import interpolate
 import math
 import warnings
 
+def _sigfigs_and_decimals(x: float | str) -> int:
+    if isinstance(x, float):
+        x = str(x)
+    
+
 def reduction(data, step, colN=0):
     """Averages data to fit into bins with width step, along the column colN"""
     assert isinstance(step, float) or isinstance(step, int)
@@ -20,19 +25,7 @@ def reduction(data, step, colN=0):
     N = Nupper - Nlower
     
     # Setup new colN
-    x = np.arange(Nlower * step, Nupper * step, step)
-    if not isinstance(step, int) and step % 1 != 0:
-        #Caculate step precision.
-        decimals = - int(np.floor(np.log10(step))) # gets decimals of largest index
-        for i in range(5):
-            step_substract = np.round(step, decimals=decimals)
-            if step - step_substract == 0:
-                break
-            else:
-                decimals = decimals + 1
-                
-        #apply rounding to linspace.
-        x = np.round(x,decimals=decimals) #correct any float imprecision. ie - linspace(-8.0, 8.01, 1602) does not give 0.01 steps appropriately. 
+    x = np.arange(Nlower * step, (Nupper+1) * step, step) # doesn't include upper bound. 
 
     ### Generate averaged data from other indexes
     # Setup new arrays
