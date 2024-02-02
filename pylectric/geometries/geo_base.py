@@ -18,6 +18,7 @@ class measurement_base(metaclass=ABCMeta):
     """An abstract class to expand and bind functions to geometric objects.
         All data is timeseries data, represented by rows for various variable columns.
         Data also should implement a sweep direction.
+        TODO: make all multivariable arrays 2D, even if only one variable, for data output consistency.
     """
     
     class sweep_enum(Enum):
@@ -58,11 +59,15 @@ class measurement_base(metaclass=ABCMeta):
         
         ## Extra Variables
         self._z = None
-        self._zerrs = None
+        self._zerr = None
         self._zlabels = None
+        
+        # Parameters
+        self.params = {} #empty list of parameters
+        
+        
         return
-
-    @abstractmethod
+    
     def __copy__(self) -> Type[Self]:
         """Creates a deep clone of base datasets.
 
@@ -85,8 +90,17 @@ class measurement_base(metaclass=ABCMeta):
         clone._ylabels = self._ylabels.copy() if self._ylabels is not None else None
         # Z
         clone._z = self._z.copy() if self._y is not None else None
-        clone._zerrs = self._zerrs.copy() if self._zerrs is not None else None
+        clone._zerr = self._zerr.copy() if self._zerr is not None else None
         clone._zlabels = self._zlabels.copy() if self._zlabels is not None else None
+        
+        # Parameters:
+        clone.params = {}
+        for key,val in self.params:
+            # Perform deep clone on each key,val pair if object has copy attr.
+            keycopy = key.copy() if hasattr(key, "copy") else key
+            valcopy = val.copy() if hasattr(val, "copy") else val
+            clone[keycopy] = valcopy
+            
         return clone
 
 
@@ -277,7 +291,7 @@ class measurement_base(metaclass=ABCMeta):
 
         Parameters
         ----------
-        vars : npt.NDArray | tuple[npt.NDArray,npt.NDArray] | tuple[npt.NDArray, npt.NDArray, list]
+        vars : npt.NDArray | tuple[npt.NDArray,npt.NDArray] | tuple[npt.NDArray, npt.NDArray, list[str]]
             2D array with values for y, or a tuple with (y, yerr) or (y, yerr, ylabels).
             If labels is not provided, new y must match existing labels length.
         
@@ -350,7 +364,7 @@ class measurement_base(metaclass=ABCMeta):
         
         Parameters
         ----------
-        vars : npt.NDArray | tuple[npt.NDArray,npt.NDArray] | tuple[npt.NDArray, npt.NDArray, list]
+        vars : npt.NDArray | tuple[npt.NDArray,npt.NDArray] | tuple[npt.NDArray, npt.NDArray, list[str]]
             2D array with values for z, or a tuple with (z, zerr) or (z, zerr, zlabels).
             If labels is not provided, new z must match existing labels length.
         
@@ -361,12 +375,12 @@ class measurement_base(metaclass=ABCMeta):
         """
         newz = False # Perform additional operations if vars is valid format.
         zold = self._z
-        zolderrs = self._zerrs
+        zolderrs = self._zerr
         zoldlabels = self._zlabels
         # Check vars input and process accordingly:
         if isinstance(vars, np.ndarray):
             self._z = vars.copy()
-            self.zerrs = None
+            self.zerr = None
             newz=True
         elif isinstance(vars, tuple) and isinstance(vars[0], np.ndarray):
             self._z = vars[0].copy()
@@ -374,22 +388,22 @@ class measurement_base(metaclass=ABCMeta):
             if l == 1:
                 newz=True
             elif isinstance(vars[1], np.ndarray):
-                self.zerrs = vars[1]
+                self.zerr = vars[1]
                 if l == 2:
                     newz=True
                 elif l == 3 and isinstance(vars[2], list):
-                    self.zerrs = vars[1]
+                    self.zerr = vars[1]
                     self.zlabels = vars[2]
                     newz=True
-        # Setup sweep direction, and enforce z mask on zerrs (as fast as checking).
+        # Setup sweep direction, and enforce z mask on zerr (as fast as checking).
         if newz:
             self.sweep_dir = measurement_base._determine_sweep_direction(self._z)
-            if isinstance(self._z, np.ma.MaskedArray) and isinstance(self._zerrs, np.ma.MaskedArray):
-                self._zerrs.mask = self._z.mask
+            if isinstance(self._z, np.ma.MaskedArray) and isinstance(self._zerr, np.ma.MaskedArray):
+                self._zerr.mask = self._z.mask
             return
         else:
             self._z = zold
-            self.zerrs = zolderrs
+            self.zerr = zolderrs
             self.zlabels = zoldlabels
             raise TypeError("Set either with a np.ndarray or a tuple with (z, zerr) or (z, zerr, zlabels).")
 
@@ -398,7 +412,7 @@ class measurement_base(metaclass=ABCMeta):
         """Resets z, zerr and zlabel variables to None.
         """
         self._z = None
-        del self.zerrs
+        del self.zerr
         del self.zlabels
         return
     
@@ -409,13 +423,11 @@ class measurement_base(metaclass=ABCMeta):
         Returns
         -------
         tuple[tuple[npt.NDArray, npt.NDArray], tuple[npt.NDArray, npt.NDArray]]
-            A tuple with elements corresponding to values and uncertainty ((x,y), (xerr,yerr)).
-            Each element is a tuple corresponding to independent and dependent variables.
+            A tuple with elements corresponding to values and uncertainty ((x,xerr), (y,yerr)).
+            Each element is a np.ndarray corresponding to independent and dependent variables.
             
         """
-        x, xerr = self.x
-        y, yerr = self.y
-        return ((x,y), (xerr,yerr))
+        return (self.x, self.y)
 
     @data.setter
     def data(self, vars: tuple[npt.NDArray, npt.NDArray] |
@@ -425,7 +437,7 @@ class measurement_base(metaclass=ABCMeta):
 
         Parameters
         ----------
-        vars : tuple[npt.NDArray, npt.NDArray] | tuple[tuple[npt.NDArray, npt.NDArray], tuple[npt.NDArray, npt.NDArray]] | tuple[tuple[npt.NDArray, npt.NDArray, list], tuple[npt.NDArray, npt.NDArray, list[str]]]
+        vars : tuple[npt.NDArray, npt.NDArray] | tuple[tuple[npt.NDArray, npt.NDArray], tuple[npt.NDArray, npt.NDArray]] | tuple[tuple[npt.NDArray, npt.NDArray, list[str]], tuple[npt.NDArray, npt.NDArray, list[str]]]
             Tuple of values (X, Y). 
             X and Y can be np.ndarrays, or tuples with (x, xerr) or (x, xerr, xlabel)
             If labels is not provided, new x/y columns must match existing labels length.
@@ -452,14 +464,11 @@ class measurement_base(metaclass=ABCMeta):
 
         Returns
         -------
-        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
-            A tuple with elements corresponding to values and uncertainty ((x,y,z), (xerr,yerr,zerr)).
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple with elements corresponding to values and uncertainty ((x,xerr), (y,yerr), (z,zerr)).
             
         """
-        x, xerr = self.x, self.xerr
-        y, yerr = self.y, self.yerr
-        z, zerr = self.z, self.zerrs
-        return ((x,y,z), (xerr,yerr,zerr))
+        return (self.x, self.y, self.z)
 
     @data_all.setter
     def data_all(self, vars:tuple[np.ndarray, np.ndarray, np.ndarray] |
@@ -604,7 +613,7 @@ class measurement_base(metaclass=ABCMeta):
         self._yerr = None
         
     @property
-    def zerrs(self) -> np.ndarray | None:
+    def zerr(self) -> np.ndarray | None:
         """Errors of z variables.
 
         Returns
@@ -614,10 +623,10 @@ class measurement_base(metaclass=ABCMeta):
             Columns correspond to different variables.
             Requires the same shape as z.
         """
-        return self._zerrs
+        return self._zerr
     
-    @zerrs.setter
-    def zerrs(self, errs: npt.NDArray | None) -> None:
+    @zerr.setter
+    def zerr(self, errs: npt.NDArray | None) -> None:
         """Sets new values for errors in z.
 
         Parameters
@@ -633,21 +642,21 @@ class measurement_base(metaclass=ABCMeta):
             Raises an excpetion if the shapes of z and errs don't match.
         """
         if errs is None:
-            self._zerrs = None
+            self._zerr = None
             return
         if self._z.shape == errs.shape:
-            self._zerrs = errs.copy()
+            self._zerr = errs.copy()
             return
         else:
             raise AttributeError("Errs doesn't match shape of z.")
 
-    @zerrs.deleter
-    def zerrs(self) -> None:
-        """Resets zerrs to None.
+    @zerr.deleter
+    def zerr(self) -> None:
+        """Resets zerr to None.
         """
-        self._zerrs = None
+        self._zerr = None
     
-    def array_errs(self) -> npt.NDArray:
+    def err_array(self) -> npt.NDArray:
         """Returns errors of variables in a single 2D numpy array.
 
         Returns
@@ -657,7 +666,7 @@ class measurement_base(metaclass=ABCMeta):
         """
         return np.c_[self.xerr, self.yerr]
 
-    def array_errs_all(self) -> npt.NDArray:
+    def err_array_all(self) -> npt.NDArray:
         """Returns all errors of variables in a single 2D numpy array.
 
         Returns
@@ -665,7 +674,7 @@ class measurement_base(metaclass=ABCMeta):
         npt.NDArray
             An array of all errors of variables of x,y,z.
         """
-        return np.c_[self.xerr, self.yerr, self.zerrs]
+        return np.c_[self.xerr, self.yerr, self.zerr]
 
     @property
     def xlabels(self) -> list[str]:
@@ -1051,7 +1060,7 @@ class measurement_base(metaclass=ABCMeta):
     
     @mask_z.setter
     def mask_z(self, mask: npt.NDArray | bool) -> None:
-        """Sets the mask for z and zerrs. 
+        """Sets the mask for z and zerr. 
         False (True) implies datapoint is included (excluded).
 
         Parameters
@@ -1078,10 +1087,10 @@ class measurement_base(metaclass=ABCMeta):
                     self._z.mask=mask
                 else:
                     self._z = np.ma.MaskedArray(self._z, mask)
-                if isinstance(self._zerrs, np.ma.MaskedArray):
-                    self._zerrs.mask=mask
+                if isinstance(self._zerr, np.ma.MaskedArray):
+                    self._zerr.mask=mask
                 else:
-                    self._zerrs = np.ma.MaskedArray(self._zerrs, mask)
+                    self._zerr = np.ma.MaskedArray(self._zerr, mask)
                 return
             else:
                 raise AttributeError("Provided mask is not boolean.")
@@ -1097,7 +1106,7 @@ class measurement_base(metaclass=ABCMeta):
         if isinstance(self._z, np.ma.MaskedArray):
             self._z = np.array(self._z)
         if isinstance(self._z, np.ma.MaskedArray):
-            self._zerrs = np.array(self._zerrs)
+            self._zerr = np.array(self._zerr)
         return
 
     @property
@@ -1357,12 +1366,12 @@ class measurement_base(metaclass=ABCMeta):
             Variable z presented in a dataframe.
         """
         zlabels = self.zlabels
-        zerrs = self.zerrs
+        zerr = self.zerr
         if zlabels is not None:
-            labels = zlabels + [a + "_err" for a in zlabels] if zerrs is not None else zlabels
+            labels = zlabels + [a + "_err" for a in zlabels] if zerr is not None else zlabels
         else:
             labels = None
-        data = np.c_[self.y, zerrs] if zerrs is not None else self.z
+        data = np.c_[self.y, zerr] if zerr is not None else self.z
         return pd.DataFrame(data, labels)
     
 class measurement_graphable(measurement_base, metaclass=ABCMeta):
@@ -1387,6 +1396,55 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
                   fig_size: tuple[float, float] | None = None,
                   **mpl_kwargs
                   ) -> Type[graphing.scalable_graph]:
+        """_summary_
+        
+        
+        Graphs and labels a x/y-axis of a list/array of axes given the indexes of x/y/z variables.
+        Used in conjunction with _2D_graph, namely to be called afterward.
+
+        Parameters
+        ----------
+        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes]
+            Matplotlib axes, either a single or multiple in an array/list.
+        xi : int | list[int] | None, optional
+            A list or single index specifying which x variables to label, by default None (all x)
+        yi : int | list[int] | None, optional
+            A list or single index specifying which y variables to label, by default None (all y/z)
+        inc_z : bool, optional
+            Whether z variables are to be included in y indexes, by default False
+
+        Raises
+        ------
+        AttributeError
+            Raised in the event of a length mismatch, if ax is singular, but xlabels and ylabels are not singular.
+        AttributeError
+            Raised in the event of a length mismatch, if ax has less indexes than the pemutations of x/y.
+        AttributeError
+            Raised if ax is not a singular or list/array of matplotlib.axes.Axes.
+        
+
+        Parameters
+        ----------
+        xi : int | list[int] | None, optional
+            _description_, by default None
+        yi : int | list[int] | None, optional
+            _description_, by default None
+        inc_z : bool, optional
+            _description_, by default False
+        labels : tuple[list[str], list[str]], optional
+            _description_, by default None
+        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None, optional
+            _description_, by default None
+        graph_method : function, optional
+            _description_, by default mplaxes.Axes.scatter
+        fig_size : tuple[float, float] | None, optional
+            _description_, by default None
+
+        Returns
+        -------
+        Type[graphing.scalable_graph]
+            _description_
+        """
         
         ## Gather data and labels:
         if inc_z: # Check if zlabels/data are included.
@@ -1455,28 +1513,6 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
                   fig_size: tuple[float, float] | None = None,
                   **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
         """TODO: Double check this method works.
-        Graphs and labels a x/y-axis of a list/array of axes given the indexes of x/y/z variables.
-        Used in conjunction with _2D_graph, namely to be called afterward.
-
-        Parameters
-        ----------
-        ax : mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes]
-            Matplotlib axes, either a single or multiple in an array/list.
-        xi : int | list[int] | None, optional
-            A list or single index specifying which x variables to label, by default None (all x)
-        yi : int | list[int] | None, optional
-            A list or single index specifying which y variables to label, by default None (all y/z)
-        inc_z : bool, optional
-            Whether z variables are to be included in y indexes, by default False
-
-        Raises
-        ------
-        AttributeError
-            Raised in the event of a length mismatch, if ax is singular, but xlabels and ylabels are not singular.
-        AttributeError
-            Raised in the event of a length mismatch, if ax has less indexes than the pemutations of x/y.
-        AttributeError
-            Raised if ax is not a singular or list/array of matplotlib.axes.Axes.
         """
         ## 1. Check format is valid requires (x,y) with numpy arrays.
         assert callable(graph_method)
@@ -1563,6 +1599,103 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         return ax
     
     @staticmethod
+    def _2D_graph_unc(data: tuple[np.ndarray, tuple[np.ndarray, np.ndarray]],
+                  labels: tuple[list[str] | str, list[str] | str] | None = None,
+                  ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] | None = None,
+                  graph_method: function = mplaxes.Axes.fill_between,
+                  fig_size: tuple[float, float] | None = None,
+                  **mpl_kwargs) -> mplaxes.Axes | npt.NDArray:
+        """TODO: Double check this method works.
+        """
+        ## 1. Check format is valid requires (x,y) with numpy arrays.
+        assert callable(graph_method)
+        if not (isinstance(data, tuple) and len(data)==2 and isinstance(data[0], np.ndarray) and isinstance(data[1], np.ndarray)):
+            raise AttributeError("Data passed as an innapropriate format, requires np.ndarray(s) in the form (x,y)")
+        
+        ## 2. Unpack data.
+        x,y = data
+        y1,y2 = y
+        # Check datalength matches for x and y.
+        if x.shape[0] != y1.shape[0]:
+            raise AttributeError("Length of x data doesn't match length of y data.")
+        if y1.shape != y2.shape:
+            raise AttributeError("y1 and y2 don't match shape.")
+        # Get data shape, match to provided axes.
+        xlen = x.shape[1] if len(x.shape) > 1 else 1
+        ylen = y1.shape[1] if len(y1.shape) > 1 else 1
+        
+        ## 3. Check label and variable lengths match.
+        if labels is not None:
+            xl, yl = labels
+            # x validity
+            if isinstance(xl, list):
+                assert len(xl) == xlen
+            else:
+                assert isinstance(xl, str) and xlen == 1
+            # y validity
+            if isinstance(yl, list):
+                assert len(yl) == ylen
+            else:
+                assert isinstance(yl, str) and ylen == 1
+        
+        ## 3. Create plots if not provided.
+        if fig_size is None:
+            # If figsize not provided, set figsize to a standard multiple of the shape.
+            fig_size = (xlen * 4, ylen * 3)    
+        ax = plt.subplots(xlen,ylen, fig_size=fig_size)[1] if ax is None else ax
+        
+        ## 4. Label/graph depending on single axis or multiple plots.
+        # Single Plot    
+        if isinstance(ax, mplaxes.Axes):
+            # Labels
+            if labels is not None:
+                # Single axis requires singular labels
+                if isinstance(xl, str) and isinstance(yl, str):
+                    ax.set_xlabel(xl)
+                    ax.set_ylabel(yl)
+                else:
+                    raise AttributeError("x/y/z labels are multiple valued, or xi/yi indexes are multiple valued, incompatible with a single Axes.")
+            # Plot
+            graph_method(ax, x=x, y1=y1, y2=y2, **mpl_kwargs)
+        
+        # Multiple plots
+        elif ((isinstance(ax, list) or isinstance(ax, np.ndarray))
+              and isinstance(xl, list) and isinstance(yl, list)):    
+            # Check shape/length matches length of x/y lists.
+            if ((isinstance(ax, np.ndarray) and #Array
+                (np.prod(ax.shape) >= xlen * ylen)) #Ax Lengths > x,y var lengths
+                or (isinstance(ax, list) # List
+                and len(ax) >= xlen * ylen) #Ax Lengths > x,y var lengths
+            ):
+                if isinstance(ax, np.ndarray):
+                    for i in range(xlen): #iterate over xy data/labels
+                        for j in range(ylen):
+                            k = i * len(yl) + j #convert label i,j to array item (if mismatch)
+                            l,m = (k % ax.shape[1], round(k/ax.shape[1])) #array item to array indexes
+                            # Data
+                            graph_method(ax[l,m], x=x[:,i], y1=y1[:,j], y2=y2[:,j], **mpl_kwargs)
+                            # Labels
+                            if labels is not None:
+                                # Set each x and y label iterating over 
+                                ax[l,m].set_xlabel(xl[i])
+                                ax[l,m].set_ylabel(yl[j])
+                else: #list
+                    for i in range(xlen):
+                        for j in range(ylen):
+                            # Data
+                            graph_method(ax[i + j * ylen], x=x[:,i], y1=y1[:,j], y2=y2[:,j], **mpl_kwargs)
+                            # labels:
+                            if labels is not None:
+                                ax[i + j * ylen].set_xlabel(xl[i])
+                                ax[i + j * ylen].set_ylabel(yl[j])
+            else:
+                raise AttributeError("Number of axes is less than number of x & y(/z) combinations.")
+        else:
+            raise AttributeError("ax is not a matplotlib.axes.Axes or list/np.ndarray of such items.")
+        return ax
+    
+    
+    @staticmethod
     def _2D_graph_wrapper(figax: mplaxes.Axes | npt.ArrayLike[mplaxes.Axes] | mplfigure.Figure) -> Type[graphing.scalable_graph]:
         """Wraps a figure, or a set of axes. Allows scaling and axis functions.
         This function should be used after calling _2D_graph, and can be overridden for different measurement 
@@ -1607,31 +1740,25 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
             y = np.c_[self.y, self.z] if yi is None else np.c_[self.y, self.z][:,yi]
         else:
             y = self.y if yi is None else self.y[:,yi]
-        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.plot)
-        self._2D_labelling(ax)
-        return self._2D_wrapper(ax)
+        return self._2D_graph((x, y), ax=ax, graph_method=plt.plot, inc_z=inc_z)
 
-    def graph_scatter(self, ax: mplaxes.Axes = None, 
+    def graph_scatter(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] = None, 
                       xi: int | list[int] | None = None, yi: int | list[int] | None = None,
                       inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
-        ax = self._2D_graph(data=(x, y), ax=ax, graph_method=plt.scatter)
-        self._2D_labelling(ax)
-        return self._2D_wrapper(ax)
+        return self._2D_graph(data=(x, y), ax=ax, graph_method=plt.scatter, inc_z=inc_z)
     
-    def graph_errorbar(self, ax: mplaxes.Axes = None, 
+    def graph_errorbar(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] = None, 
                        xi: int | None = None, yi: int | None = None,
                        inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x = self.x if xi is None else self.x[:,xi]
         y = self.y if yi is None else self.y[:,yi]
         xerr = self.xerr if xi is None else self.xerr[:,xi]
         yerr = self.yerr if yi is None else self.yerr[:,yi]
-        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr})
-        self._2D_labelling(ax)
-        return self._2D_wrapper(ax)
+        return self._2D_graph((x, y), ax=ax, graph_method=plt.errorbar, **{"xerr":xerr, "yerr":yerr}, inc_z=inc_z)
     
-    def graph_plot_error_fill(self, ax: mplaxes.Axes = None, 
+    def graph_plot_error_fill(self, ax: mplaxes.Axes | list[mplaxes.Axes] | np.ndarray[mplaxes.Axes] = None, 
                               xi: int | None = None, yi: int | None = None,
                               inc_z: bool = False) -> Type[graphing.scalable_graph]:
         x, xerr = self.x
@@ -1640,10 +1767,14 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
         y = y if yi is None else y[:,yi]
         xerr = xerr if xi is None else xerr[:,xi]
         yerr = yerr if yi is None else yerr[:,yi]
-        ax = self._2D_graph((x, y), ax=ax, graph_method=plt.plot)
-        ax.fill_between(x=x, y1=y+yerr, y2=y-yerr)
-        self._2D_labelling(ax)
-        return self._2D_wrapper(ax)
+        # use regular data for x/y plot
+        sg = self._2D_graph((x, y), ax=ax, graph_method=plt.plot)
+        ax = sg.ax
+        # use modified data for filled uncertainty area
+        yupper = y+yerr
+        ylower = y-yerr
+        self._2D_graph_unc((x, (ylower, yupper)), ax=ax)
+        return sg
     
     def sweep_arrow_location(self, i):
         if len(self.ind_vars().shape) == 1:
@@ -1722,111 +1853,186 @@ class measurement_graphable(measurement_base, metaclass=ABCMeta):
                 
         return tg
     
-    @staticmethod
-    def _graph_3Ddata(data, axes=None, scatter=False, **mpl_kwargs) -> graphing.transport_graph:
-        #TODO: update to match _plot_2Ddata methods... NOT WORKING.
-        assert isinstance(data, np.ndarray)
-        dl = len(data.shape)
-        assert dl == 2 or dl == 3 #if 3, assume first two columns are independent vars, no matter if in 2D or 3D shape.
-
-        nd = data.shape[-1] - 2 #doesn't matter if 2D or 3D, last dimension length determines number of parameters.
-        if axes is None:
-            fig, axes = plt.subplots(nd, 1)
-            fig.set_size_inches(
-                w=journals.acsNanoLetters.maxwidth_2col, h=3*nd)
-        
-        # Graphing wrapper
-        tg = graphing.transport_graph(axes)
-        
-        if dl==3: 
-            data = data.reshape([data.shape[0] * data.shape[1],nd])
-        
-        for i in range(2, nd+2):
-            if scatter:
-                axes[i-2].scatter(data[:, 0], data[:,1], data[:, i], **mpl_kwargs)
-            else:
-                axes[i-2].plot(data[:, 0], data[:,1], data[:, i], **mpl_kwargs)
-
-        # TODO: Uncomment...
-        # tg.setDefaultTicks()
-
-        return tg
+class set_base(metaclass=ABCMeta):
+    """Allows binding of a series of measurement_base typed objects,
+    and allows the projection of one variable or measurement as a secondary axis.
+    Does not perform a deep copy on measurement_base objects, rather just references to them."""
     
-    @staticmethod
-    def _data_compatability(A,B):
-        assert isinstance(A, np.ndarray)
-        assert isinstance(B, np.ndarray)
-        li = len(A.shape)
-        if li > 1:
-            assert A.shape[:-1] == B.shape[:-1]
-        elif li == 1:
-            assert A.shape[0] == B.shape[0]
-        return
-    
-    @abstractmethod
-    def plot_all_data(self, axes=None, scatter=False, **mpl_kwargs):
-        """Generates a plot of all data attached to object.
-        Subplots determined by independent variables (columns) and dependent / extra variables (rows).
-        Requires overriding to label individual plots appropraitely.
-
-        """
-        vari = self.ind_vars()
-        vard = self.dep_vars()
-        vare = self.vars_extra()
-        measurement_base._data_compatability(vari, vard)
-        if vare is not None:
-            measurement_base._data_compatability(vari, vare)
-            data = np.c_[vari, vard, vare]
-        else:
-            data = np.c_[vari, vard]
-            
-        li = len(vari.shape)
-        if li == 1:
-            tg = measurement_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs) 
-        elif li == 2 or li == 3:
-            tg = measurement_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
-        else:
-            raise AttributeError("Too many independent variables")        
-        return tg
-
-    @abstractmethod
-    def plot_dep_vars(self, axes=None, scatter=False, **mpl_kwargs):
-        """Generates a plot of all data attached to object.
-        Subplots determined by independent variables (columns) and dependent / extra variables (rows).
-        Requires override to label plots appropriately.
-        """
-        vari = self.ind_vars()  # 1D array
-        vard = self.dep_vars()  # 2D array
-
-        assert isinstance(vari, np.ndarray)
-        assert isinstance(vard, np.ndarray)
-        if len(vari.shape) > 1:
-            assert vari.shape[:-1] == vard.shape[:-1]
-        elif len(vari.shape) == 1:
-            assert vari.shape[0] == vard.shape[0]
-
-        li = len(vari.shape)
-        if li == 1:
-            data = np.c_[vari, vard]
-            tg = measurement_base._graph_2Ddata(data, axes, scatter, **mpl_kwargs)
-        elif li == 2 or li == 3:
-            data = np.c_[vari, vard]
-            tg = measurement_base._graph_3Ddata(data, axes, scatter, **mpl_kwargs)
-        else:
-            raise AttributeError("Too many independent variables")
-
-        # if 'label' in mpl_kwargs:
-        #     for ax in tg.ax:
-        #         lgnd = ax.legend()
-        #         for handle in lgnd.legendHandles:
-        #             handle.set_sizes([10])
-        return tg
-    
-class series_base(metaclass=ABCMeta):
-    
-    def __init__(self, instances: list[Type[measurement_base]] | list[Type[measurement_graphable]]) -> None:
+    def __init__(self, instances: list[Type[measurement_base]]) -> None:
         super().__init__()
-        self._instances = instances.copy()
+        self._measurements = instances        
         return
     
-    def 
+    def data(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+        """Returns the concatenation of all sets of data in a tuple (X,Y) where X/Y are another tuple with elements (variables, uncertainties).
+
+        Returns
+        -------
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple of concatenated datasets (variables, uncertainties). 
+            Both variables and uncertainties are tuples of np.ndarrays, as (x,y) and (xerr, yerr) respectively.
+        """
+        datasets = [inst.data() for inst in self._measurements]
+        X = [dset[0] for dset in datasets] # x, xerr
+        Y = [dset[1] for dset in datasets] # y, yerr
+        x = np.r_[*[dset[0] for dset in X]]
+        y = np.r_[*[dset[0] for dset in Y]]
+        xerr = np.r_[*[dset[1] for dset in X]]
+        yerr = np.r_[*[dset[1] for dset in Y]]
+        return ((x, xerr), (y, yerr))
+    
+    def data_all(self) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+        """Returns the concatenation of all sets of data in a tuple (variables, uncertainties).
+
+        Returns
+        -------
+        tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
+            A tuple of concatenated datasets (variables, uncertainties). 
+            Both variables and uncertainties are tuples of np.ndarrays, as (x,xerr) and (xerr, yerr) respectively.
+        """
+        datasets = [inst.data_all() for inst in self._measurements]
+        X = [dset[0] for dset in datasets] # x, xerr
+        Y = [dset[1] for dset in datasets] # y, yerr
+        Z = [dset[2] for dset in datasets] # y, yerr
+        x = np.r_[*[dset[0] for dset in X]]
+        y = np.r_[*[dset[0] for dset in Y]]
+        z = np.r_[*[dset[0] for dset in Z]]
+        xerr = np.r_[*[dset[1] for dset in X]]
+        yerr = np.r_[*[dset[1] for dset in Y]]
+        zerr = np.r_[*[dset[1] for dset in Z]]
+        return ((x, xerr), (y, yerr), (z, zerr))
+    
+    def data_by_param(self, param_name: str, func: function = None) -> list:
+        param_list = []
+        # Check param is in every dataset
+        for i in range(len(self._measurements)):
+            if param_name not in self._measurements[i].params:
+                raise KeyError("Measurement index #", i, "does not contain'", param_name, "'in it's parameter set.")
+            else:
+                if func is not None:
+                    param_list.append(func(self._measurements[i].params[param_name]))
+                else:
+                    param_list.append(self._measurements[i].params[param_name])
+        return param_list
+        
+    def data_by_variable_index(self, i: int, func: function = None) -> tuple[np.ndarray, np.ndarray]:
+        variable_list = []
+        errors_list = []
+        for j in range(len(self._measurements)):
+            meas = self._measurements[j]
+            xl = len(meas.x)
+            yl = len(meas.y)
+            zl = len(meas.z) if meas.z is not None else 0 #sometimes z not defined.
+            # Get item
+            if i >= xl + yl and i < xl + yl + zl:
+                i -= xl + yl
+                item = (meas.z[:,i], meas.zerr[:,i])
+            elif i >= xl and i < xl + yl:
+                i -= xl
+                item = (meas.y[:,i], meas.yerr[:,i]) 
+            elif i < xl:
+                item = (meas.x[:,i], meas.xerr[:,i]) 
+            else: # i >= xl + yl + zl
+                raise IndexError("Variable index ", i, "is outside range of the total length of x,y,z variable lists with respective lengths (", str(xl), ",", str(yl), ",", zl ,").")
+                
+            # Process item with function
+            if func is not None:
+                if isinstance(func, callable):
+                    item = (func(item[0]), func(item[1]))
+                else:
+                    raise AttributeError(func, " is not a np.ndarray operator.")    
+            variable_list.append(item[0])
+            errors_list.append(item[1])
+        return np.array(variable_list), np.array(errors_list)
+        
+    def _duplicates(strlist: list[str]) -> list[str]:
+        counter = {}
+        duplicates = []
+        for i in range(len(strlist)):
+            if strlist[i] not in counter:
+                counter[strlist[i]] = 1
+            else:
+                counter[strlist[i]] += 1
+                if counter[strlist[i]] == 2:
+                    duplicates.append(strlist[i])
+        # duplicates = [s for s in counter.keys() if counter[s] > 1] #alternative
+        return duplicates
+    
+    def _index(strlist: list[str], val: str) -> None | int:
+        for i in range(len(strlist)):
+            if strlist[i] == val:
+                return i
+        return None
+        
+    def data_by_variable_label(self, var_name: str, func: callable[[npt.NDArray, npt.NDArray], tuple(npt.NDArray, npt.NDArray)] = None) -> tuple[npt.NDArray, npt.NDArray]:
+        variable_list = []
+        errors_list = []
+        for i in range(len(self._measurements)):
+            meas = self._measurements[i]
+            xlabels, ylabels, zlabels = meas.xlabels, meas.ylabels, meas.zlabels
+            all_labels = xlabels + ylabels + zlabels
+            xl, yl, zl = len(xlabels), len(ylabels), len(zlabels)
+            
+            # 1 Check for duplicates - then cannot identify by label
+            duplicates = set_base._duplicates(all_labels)
+            if len(duplicates) > 0:
+                raise AttributeError("Duplicate labels across x,y(,z) variables: ", duplicates, 
+                                     " - cannot isolate variable data.")
+            else:    
+                li = set_base._index(all_labels, var_name)
+                if li is None:
+                    raise KeyError(var_name, "is not found in x,y(,z) labels.")
+                # Get item
+                if li >= xl + yl and li < xl + yl + zl:
+                    li -= xl + yl
+                    item = (meas.z[:,li], meas.zerr[:,li]) 
+                elif li >= xl and li < xl + yl:
+                    li -= xl
+                    item = (meas.y[:,li], meas.yerr[:,li]) 
+                elif li < xl:
+                    item = (meas.x[:,li], meas.xerr[:,li]) 
+                else: # li > xl + yl + zl
+                    raise IndexError("Index provided", li, "is outside the length of the label lists,", xl + yl + zl)
+                
+                # Process item with function
+                if func is not None:
+                    if isinstance(func, callable):
+                        item = (func(item[0]), func(item[1]))
+                    else:
+                        raise AttributeError(func, " is not a np.ndarray operator.")    
+                variable_list.append(item[0])
+                errors_list.append(item[1])
+        return np.array(variable_list), np.array(errors_list)
+    
+        
+    def data_by_attribute(self, attr_name: str, attr_unc_name: str = None, func: function = None):
+        variable_list = []
+        errors_list = [] if attr_unc_name is not None else None
+        for i in range(len(self._measurements)):
+            meas = self._measurements[i]
+            
+            # Check for attribute
+            if hasattr(meas, attr_name):
+                item0 = getattr(meas, attr_name)
+            else:
+                raise AttributeError("Measurement object #", i, "does not have the attribute '", attr_name, "'.")
+                
+            item1 = None
+            if attr_unc_name is not None and hasattr(meas, attr_unc_name):
+                item1 = getattr(meas, attr_unc_name)
+            elif attr_unc_name is not None:
+                raise AttributeError("Measurement object #", i, "does not have the uncertainty attribute '", attr_unc_name, "'.")
+            else:
+                # attr_unc_name is None, does not want 
+                pass
+            
+            # Process item with function
+            if func is not None:
+                if isinstance(func, callable):
+                    item = (func(item[0]), func(item[1]))
+                else:
+                    raise AttributeError(func, " is not a np.ndarray operator.")    
+            variable_list.append(item[0])
+            errors_list.append(item[1])
+        return np.array(variable_list), np.array(errors_list)
+        
